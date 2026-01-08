@@ -286,10 +286,37 @@ if command -v claude &> /dev/null; then
     else
         echo -e "       ${YELLOW}⚠️  appium-mcp registration failed${NC}"
     fi
+
+    # Swagger/OpenAPI MCP (API 명세서 분석)
+    claude mcp remove -s user swagger-mcp 2>/dev/null || true
+    if claude mcp add -s user swagger-mcp -- npx -y @anthropic-community/swagger-mcp-server 2>/dev/null; then
+        echo -e "       ${GREEN}✅ swagger-mcp registered (API spec analysis)${NC}"
+    else
+        echo -e "       ${YELLOW}⚠️  swagger-mcp registration failed${NC}"
+    fi
+
+    # Figma MCP (화면설계서)
+    claude mcp remove -s user figma 2>/dev/null || true
+    if claude mcp add -s user figma -- npx -y figma-developer-mcp --stdio 2>/dev/null; then
+        echo -e "       ${GREEN}✅ figma registered (UI design)${NC}"
+    else
+        echo -e "       ${YELLOW}⚠️  figma registration failed (requires Figma Desktop)${NC}"
+    fi
+
+    # Atlassian MCP (Confluence/Jira - SSE transport)
+    claude mcp remove -s user atlassian 2>/dev/null || true
+    if claude mcp add -s user --transport sse atlassian https://mcp.atlassian.com/v1/sse 2>/dev/null; then
+        echo -e "       ${GREEN}✅ atlassian registered (Confluence/Jira)${NC}"
+    else
+        echo -e "       ${YELLOW}⚠️  atlassian registration failed${NC}"
+    fi
 else
     echo -e "       ${YELLOW}⚠️  'claude' command not found. Please register external MCP servers manually:${NC}"
     echo -e "       claude mcp add -s user playwright npx @playwright/mcp@latest"
     echo -e "       claude mcp add -s user appium-mcp -- npx -y appium-mcp@latest"
+    echo -e "       claude mcp add -s user swagger-mcp -- npx -y @anthropic-community/swagger-mcp-server"
+    echo -e "       claude mcp add -s user figma -- npx -y figma-developer-mcp --stdio"
+    echo -e "       claude mcp add -s user --transport sse atlassian https://mcp.atlassian.com/v1/sse"
 fi
 
 echo ""
@@ -336,8 +363,11 @@ if [ -d "$SHARED_DIR/mcp-servers" ]; then
 fi
 
 # External MCP 서버
-echo -e "  ${GREEN}✅${NC} playwright (Web E2E - npx @playwright/mcp@latest)"
-echo -e "  ${GREEN}✅${NC} appium-mcp (Mobile App - npx appium-mcp@latest)"
+echo -e "  ${GREEN}✅${NC} playwright (Web E2E)"
+echo -e "  ${GREEN}✅${NC} appium-mcp (Mobile App)"
+echo -e "  ${GREEN}✅${NC} swagger-mcp (API Spec)"
+echo -e "  ${GREEN}✅${NC} figma (UI Design)"
+echo -e "  ${GREEN}✅${NC} atlassian (Confluence/Jira)"
 echo ""
 
 echo "Usage:"
@@ -346,9 +376,16 @@ echo "  - On session start, agents auto-update via git pull"
 echo "  - Override in project: .claude/agents/<name>/"
 echo ""
 echo "MCP Tools available after restart:"
-echo "  - doc-converter: convert_pdf_to_md, convert_docx_to_md, check_spec_files"
-echo "  - playwright: browser_navigate, browser_click, browser_snapshot, etc. (Web)"
-echo "  - appium-mcp: appium_start_session, appium_tap, appium_type, appium_screenshot, etc. (Mobile)"
+echo ""
+echo "  [Testing]"
+echo "  - playwright: browser_navigate, browser_click, browser_snapshot (Web E2E)"
+echo "  - appium-mcp: appium_start_session, appium_tap, appium_screenshot (Mobile)"
+echo ""
+echo "  [Documentation]"
+echo "  - doc-converter: convert_pdf_to_md, convert_docx_to_md (기획서)"
+echo "  - swagger-mcp: load_swagger, list_endpoints, get_schema (API 명세)"
+echo "  - figma: get_figma_data, get_components (화면설계서)"
+echo "  - atlassian: confluence_get_page, jira_get_issue (Confluence/Jira)"
 echo ""
 echo "Project-level setup:"
 echo "  ./scripts/init-project.sh <project-name>"

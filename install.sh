@@ -3,6 +3,7 @@
 # Shared Claude Agents - Install Script
 #
 # 이 스크립트는 공유 에이전트를 설치하고 SessionStart hook을 설정합니다.
+# 또한 MCP 서버를 빌드하고 Claude Code 설정을 자동으로 구성합니다.
 # 기존 에이전트가 있으면 보호하고, 충돌 시 사용자에게 선택권을 제공합니다.
 #
 
@@ -20,6 +21,7 @@ SHARED_DIR="$HOME/.claude/shared-agents"
 AGENTS_LINK="$HOME/.claude/agents"
 SETTINGS_FILE="$HOME/.claude/settings.json"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MCP_SERVERS_DIR="$SCRIPT_DIR/mcp-servers"
 
 echo ""
 echo "=========================================="
@@ -27,9 +29,30 @@ echo "  Shared Claude Agents Installer"
 echo "=========================================="
 echo ""
 
+# -----------------------------------------------------------------------------
+# Step 0: Node.js 버전 확인 (MCP 서버용)
+# -----------------------------------------------------------------------------
+echo -e "${YELLOW}[0/6]${NC} Checking Node.js version..."
+
+if ! command -v node &> /dev/null; then
+    echo -e "       ${YELLOW}Warning:${NC} Node.js not found. MCP servers will not be built."
+    echo -e "       Install Node.js 18+ to use MCP servers: https://nodejs.org/"
+    BUILD_MCP=false
+else
+    NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
+    if [ "$NODE_VERSION" -lt 18 ]; then
+        echo -e "       ${YELLOW}Warning:${NC} Node.js 18+ required for MCP servers. (current: $(node -v))"
+        BUILD_MCP=false
+    else
+        echo -e "       ${GREEN}Node.js $(node -v) found${NC}"
+        BUILD_MCP=true
+    fi
+fi
+echo ""
+
 # 1. 현재 위치가 표준 위치가 아니면 복사/이동
 if [ "$SCRIPT_DIR" != "$SHARED_DIR" ]; then
-    echo -e "${YELLOW}[1/5]${NC} Installing to $SHARED_DIR..."
+    echo -e "${YELLOW}[1/6]${NC} Installing to $SHARED_DIR..."
 
     # 기존 디렉토리가 있으면 백업
     if [ -d "$SHARED_DIR" ]; then
@@ -42,11 +65,11 @@ if [ "$SCRIPT_DIR" != "$SHARED_DIR" ]; then
     cp -r "$SCRIPT_DIR" "$SHARED_DIR"
     echo -e "       ${GREEN}Done${NC}"
 else
-    echo -e "${GREEN}[1/5]${NC} Already in standard location"
+    echo -e "${GREEN}[1/6]${NC} Already in standard location"
 fi
 
 # 2. 기존 에이전트 확인 및 보호
-echo -e "${YELLOW}[2/5]${NC} Checking existing agents..."
+echo -e "${YELLOW}[2/6]${NC} Checking existing agents..."
 
 if [ -d "$AGENTS_LINK" ] && [ ! -L "$AGENTS_LINK" ]; then
     echo -e "       ${YELLOW}Warning:${NC} Existing agents folder found at $AGENTS_LINK"
@@ -100,13 +123,13 @@ fi
 echo -e "       ${GREEN}Done${NC}"
 
 # 3. Symlink 생성
-echo -e "${YELLOW}[3/5]${NC} Creating symlink..."
+echo -e "${YELLOW}[3/6]${NC} Creating symlink..."
 
 ln -s "$SHARED_DIR/agents" "$AGENTS_LINK"
 echo -e "       ${GREEN}Linked:${NC} $AGENTS_LINK -> $SHARED_DIR/agents"
 
 # 4. Standards/Skills/Rules 심볼릭 링크 (있으면)
-echo -e "${YELLOW}[4/5]${NC} Linking additional resources..."
+echo -e "${YELLOW}[4/6]${NC} Linking additional resources..."
 
 # Standards
 if [ -d "$SHARED_DIR/standards" ]; then
@@ -144,7 +167,7 @@ fi
 echo -e "       ${GREEN}Done${NC}"
 
 # 5. SessionStart Hook 설정
-echo -e "${YELLOW}[5/5]${NC} Configuring SessionStart hook..."
+echo -e "${YELLOW}[5/6]${NC} Configuring SessionStart hook..."
 
 HOOK_COMMAND="cd \"\$HOME/.claude/shared-agents\" && git pull -q 2>/dev/null || true"
 
@@ -179,6 +202,89 @@ else
     echo ""
 fi
 
+# 6. MCP 서버 빌드 및 설정
+echo -e "${YELLOW}[6/6]${NC} Building MCP servers..."
+
+if [ "$BUILD_MCP" = true ] && [ -d "$MCP_SERVERS_DIR" ]; then
+    MCP_SERVERS_BUILT=()
+
+    for server_dir in "$MCP_SERVERS_DIR"/*/; do
+        if [ -d "$server_dir" ]; then
+            server_name=$(basename "$server_dir")
+
+            if [ -f "$server_dir/package.json" ]; then
+                echo -e "       📦 Building $server_name..."
+
+                cd "$server_dir"
+                npm install --silent 2>/dev/null || npm install
+                npm run build --silent 2>/dev/null || npm run build
+                cd "$SCRIPT_DIR"
+
+                # dist/index.js가 있으면 설정에 추가
+                if [ -f "$server_dir/dist/index.js" ]; then
+                    echo -e "       ${GREEN}✅ $server_name built successfully${NC}"
+                    MCP_SERVERS_BUILT+=("$server_name")
+                else
+                    echo -e "       ${RED}❌ $server_name build failed${NC}"
+                fi
+            fi
+        fi
+    done
+
+    # claude mcp add 명령으로 MCP 서버 등록
+    if [ ${#MCP_SERVERS_BUILT[@]} -gt 0 ]; then
+        echo ""
+        echo -e "       Registering MCP servers with Claude Code..."
+
+        # claude 명령이 있는지 확인
+        if command -v claude &> /dev/null; then
+            for server_name in "${MCP_SERVERS_BUILT[@]}"; do
+                SERVER_PATH="$SHARED_DIR/mcp-servers/$server_name/dist/index.js"
+
+                # 기존 등록 제거 후 재등록 (오류 무시)
+                claude mcp remove -s user "$server_name" 2>/dev/null || true
+
+                # 전역으로 MCP 서버 등록
+                if claude mcp add -s user "$server_name" node "$SERVER_PATH" 2>/dev/null; then
+                    echo -e "       ${GREEN}✅ $server_name registered${NC}"
+                else
+                    echo -e "       ${YELLOW}⚠️  $server_name registration failed (try manually: claude mcp add -s user $server_name node $SERVER_PATH)${NC}"
+                fi
+            done
+        else
+            echo -e "       ${YELLOW}⚠️  'claude' command not found. Please register MCP servers manually:${NC}"
+            for server_name in "${MCP_SERVERS_BUILT[@]}"; do
+                echo -e "       claude mcp add -s user $server_name node $SHARED_DIR/mcp-servers/$server_name/dist/index.js"
+            done
+        fi
+    fi
+else
+    if [ "$BUILD_MCP" = false ]; then
+        echo -e "       ${YELLOW}⚠️  Skipped (Node.js 18+ required)${NC}"
+    else
+        echo -e "       ${YELLOW}⚠️  No MCP servers found${NC}"
+    fi
+fi
+
+# External MCP 서버 등록 (npx 기반)
+echo ""
+echo -e "       Registering external MCP servers..."
+
+if command -v claude &> /dev/null; then
+    # Playwright MCP (Microsoft 공식 - 브라우저 자동화 및 E2E 테스트)
+    claude mcp remove -s user playwright 2>/dev/null || true
+    if claude mcp add -s user playwright npx @playwright/mcp@latest 2>/dev/null; then
+        echo -e "       ${GREEN}✅ playwright registered (Microsoft official)${NC}"
+    else
+        echo -e "       ${YELLOW}⚠️  playwright registration failed (try manually: claude mcp add -s user playwright npx @playwright/mcp@latest)${NC}"
+    fi
+else
+    echo -e "       ${YELLOW}⚠️  'claude' command not found. Please register external MCP servers manually:${NC}"
+    echo -e "       claude mcp add -s user playwright npx @playwright/mcp@latest"
+fi
+
+echo ""
+
 # 완료
 echo ""
 echo -e "${GREEN}================================================${NC}"
@@ -186,15 +292,43 @@ echo -e "${GREEN}  Installation complete!${NC}"
 echo -e "${GREEN}================================================${NC}"
 echo ""
 echo "Installed agents:"
-ls -1 "$SHARED_DIR/agents" | while read dir; do
+ls -1 "$SHARED_DIR/agents" 2>/dev/null | while read dir; do
     echo "  - $dir"
 done
 echo ""
+
+# MCP 서버 목록
+echo "Installed MCP servers:"
+
+# 로컬 MCP 서버
+if [ -d "$SHARED_DIR/mcp-servers" ]; then
+    for server_dir in "$SHARED_DIR/mcp-servers"/*/; do
+        if [ -d "$server_dir" ]; then
+            server_name=$(basename "$server_dir")
+            if [ -f "$server_dir/dist/index.js" ]; then
+                echo -e "  ${GREEN}✅${NC} $server_name (local)"
+            else
+                echo -e "  ${YELLOW}⚠️${NC}  $server_name (not built)"
+            fi
+        fi
+    done
+fi
+
+# External MCP 서버
+echo -e "  ${GREEN}✅${NC} playwright (npx @playwright/mcp@latest)"
+echo ""
+
 echo "Usage:"
 echo "  - Agents are now available in all Claude Code projects"
 echo "  - On session start, agents auto-update via git pull"
 echo "  - Override in project: .claude/agents/<name>/"
 echo ""
+echo "MCP Tools available after restart:"
+echo "  - doc-converter: convert_pdf_to_md, convert_docx_to_md, check_spec_files"
+echo "  - playwright: browser_navigate, browser_click, browser_snapshot, browser_take_screenshot, etc."
+echo ""
 echo "Project-level setup:"
 echo "  ./scripts/init-project.sh <project-name>"
+echo ""
+echo -e "${YELLOW}⚠️  Please restart Claude Code to use MCP servers${NC}"
 echo ""

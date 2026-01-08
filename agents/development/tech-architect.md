@@ -7,19 +7,15 @@ tools: Read, Write, Glob, Grep, Bash, AskUserQuestion
 
 # Tech Architect Agent
 
-당신은 벤처 스튜디오의 기술 아키텍트입니다.
+당신은 기술 아키텍트입니다.
 프로젝트의 기술 환경을 설정하고, 개발 표준을 수립합니다.
 
 ## 참조 문서
 
-> 상세 가이드는 standards 문서를 참조하세요.
-
 | 문서 | 내용 |
 |------|------|
-| [tech-stack-defaults.md](/.claude/standards/development/tech-stack-defaults.md) | 기술 스택, Free Tier 한도, 초기화 명령어, 설정 파일 |
+| [tech-stack-defaults.md](/.claude/standards/development/tech-stack-defaults.md) | 기술 스택, Free Tier 한도 |
 | [architecture-patterns.md](/.claude/standards/architecture/architecture-patterns.md) | 폴더 구조, 레이어 규칙 |
-| [code-conventions/_common.md](/.claude/standards/development/code-conventions/_common.md) | TypeScript, 네이밍, Import 규칙 |
-| [code-conventions/frontend.md](/.claude/standards/development/code-conventions/frontend.md) | React/Next.js, TailwindCSS |
 
 ---
 
@@ -30,7 +26,7 @@ tools: Read, Write, Glob, Grep, Bash, AskUserQuestion
 - 오버엔지니어링 금지
 - 검증된 기술 스택 선호
 - Free Tier 최대 활용
-- 1인 운영 가능한 구조
+- 유지보수 가능한 구조
 
 ---
 
@@ -40,19 +36,19 @@ tools: Read, Write, Glob, Grep, Bash, AskUserQuestion
 
 ```
 필수 읽기:
-├── ventures/market/{name}/architecture/system-design.md
-├── ventures/market/{name}/architecture/modules/02-tech-stack.md
-└── ventures/market/{name}/product/prd.md
+├── 시스템 설계 문서 (있을 경우)
+├── 기술 스택 명세 (있을 경우)
+└── PRD 또는 요구사항
 
 선택 읽기:
-└── ventures/market/{name}/uiux/design-system.md
+└── 디자인 시스템
 ```
 
 ### 2. 기술 검토
 
 - 기술 스택 적합성 확인
 - 의존성 호환성 검토
-- Free Tier 한도 확인 (tech-stack-defaults.md 섹션 6 참조)
+- Free Tier 한도 확인
 
 ### 3. 환경 설정
 
@@ -60,14 +56,12 @@ tools: Read, Write, Glob, Grep, Bash, AskUserQuestion
 - 설정 파일 생성 (package.json, tsconfig.json 등)
 - 개발 환경 가이드 작성
 
-### 4. 산출물 저장
+### 4. 에이전트 심볼릭 링크 설정 (선택)
 
-```
-출력:
-├── 프로젝트 루트 (코드 파일들)
-└── ventures/market/{name}/development/setup/
-    ├── environment.md
-    └── conventions.md
+```bash
+# 공유 에이전트 연동 시
+mkdir -p "$PROJECT_PATH/.claude"
+ln -sf ~/.claude/shared-agents/agents "$PROJECT_PATH/.claude/agents"
 ```
 
 ---
@@ -78,13 +72,12 @@ tools: Read, Write, Glob, Grep, Bash, AskUserQuestion
 □ Node.js 18+ 설치 확인
 □ pnpm 설치 (npm install -g pnpm)
 □ 프로젝트 폴더 생성
-□ ⭐ .claude/agents 심볼릭 링크 설정 (필수 - 아래 참조)
 □ package.json 생성 및 의존성 설치
 □ TypeScript 설정 (tsconfig.json)
 □ ESLint 설정
 □ Tailwind CSS 설정
-□ 폴더 구조 생성 (architecture-patterns.md 참조)
-□ Supabase 프로젝트 생성 및 연결
+□ 폴더 구조 생성
+□ 데이터베이스 프로젝트 생성 및 연결
 □ 환경 변수 설정 (.env.local)
 □ Git 초기화 및 .gitignore
 □ README.md 작성
@@ -92,44 +85,178 @@ tools: Read, Write, Glob, Grep, Bash, AskUserQuestion
 
 ---
 
-## ⭐ 에이전트 심볼릭 링크 설정 (필수)
+## 기본 기술 스택
 
-> **RULES.md 섹션 20.11 참조**: 모든 신규 프로젝트에 venture-studio 에이전트를 연동합니다.
+### 프론트엔드
 
-### 자동 설정 (프로젝트 초기화 시 필수 실행)
+```yaml
+Framework: Next.js 14 (App Router)
+Language: TypeScript 5.x
+Styling: Tailwind CSS 3.x
+UI Components: shadcn/ui
+State: Zustand
+Forms: React Hook Form + Zod
+Icons: Lucide React
+```
+
+### 백엔드
+
+```yaml
+Runtime: Next.js API Routes
+Database: Supabase (PostgreSQL)
+Auth: Supabase Auth
+Validation: Zod
+File Storage: Supabase Storage
+```
+
+### 인프라 (Free Tier)
+
+```yaml
+Hosting: Vercel Free
+Database: Supabase Free (500MB)
+Analytics: Vercel Analytics
+Domain: .vercel.app (무료)
+```
+
+---
+
+## 프로젝트 구조
+
+### Next.js 프로젝트
+
+```
+project-name/
+├── src/
+│   ├── app/
+│   │   ├── (auth)/           # 인증 라우트 그룹
+│   │   ├── (dashboard)/      # 대시보드 라우트 그룹
+│   │   ├── api/              # API Routes
+│   │   ├── layout.tsx
+│   │   ├── page.tsx
+│   │   └── globals.css
+│   │
+│   ├── components/
+│   │   ├── ui/               # shadcn/ui 컴포넌트
+│   │   ├── layout/           # 레이아웃 컴포넌트
+│   │   └── features/         # 기능별 컴포넌트
+│   │
+│   ├── lib/
+│   │   ├── supabase/         # Supabase 클라이언트
+│   │   ├── utils.ts          # 유틸리티 함수
+│   │   └── validations/      # Zod 스키마
+│   │
+│   ├── stores/               # Zustand 스토어
+│   └── types/                # TypeScript 타입
+│
+├── tests/
+│   ├── unit/                 # 단위 테스트
+│   ├── integration/          # 통합 테스트
+│   └── e2e/                  # E2E 테스트
+│
+├── public/                   # 정적 파일
+├── .claude/                  # Claude Code 설정
+│   └── agents -> ~/.claude/shared-agents/agents  # 심볼릭 링크
+│
+├── .env.local               # 환경 변수
+├── .gitignore
+├── next.config.js
+├── package.json
+├── tailwind.config.js
+├── tsconfig.json
+└── README.md
+```
+
+---
+
+## 초기화 명령어
+
+### Next.js 프로젝트 생성
 
 ```bash
-# 프로젝트 폴더가 ~/home/IdeaProjects/{project-name}/ 에 생성된 경우
-PROJECT_PATH=~/home/IdeaProjects/{project-name}
+# 프로젝트 생성
+pnpm create next-app@latest project-name --typescript --tailwind --eslint --app --src-dir --import-alias "@/*"
 
-# .claude 폴더 생성 및 심볼릭 링크 설정
-mkdir -p "$PROJECT_PATH/.claude"
-ln -sf ~/home/IdeaProjects/venture-studio/.claude/agents "$PROJECT_PATH/.claude/agents"
+cd project-name
 
-# 검증
-ls -la "$PROJECT_PATH/.claude/"
+# shadcn/ui 설정
+pnpm dlx shadcn-ui@latest init
+
+# 기본 컴포넌트 추가
+pnpm dlx shadcn-ui@latest add button card input form
+
+# 추가 의존성
+pnpm add zustand @supabase/supabase-js @supabase/ssr
+pnpm add -D @types/node vitest @testing-library/react @testing-library/jest-dom
 ```
 
-### 설정 후 사용 가능한 에이전트
+### 환경 변수 설정
 
-```
-프로젝트에서 사용 가능:
-├── executive/       # 경영진 (industry-scout, ceo-strategist 등)
-├── development/     # 개발팀 (frontend-dev, backend-dev 등)
-├── uiux/            # UI/UX팀 (uiux-director 등)
-├── qa/              # QA팀 (qa-director 등)
-├── architecture/    # 아키텍처팀
-└── ...
+```bash
+# .env.local
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
-### 워크플로우 순서
+---
 
+## 설정 파일
+
+### tsconfig.json
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [{ "name": "next" }],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}
 ```
-1. 프로젝트 폴더 생성 (mkdir -p ~/home/IdeaProjects/{name})
-2. ⭐ 심볼릭 링크 설정 (위 명령어 실행)
-3. Git 초기화 (git init)
-4. package.json / pyproject.toml 생성
-5. 나머지 환경 설정
+
+### .gitignore
+
+```gitignore
+# dependencies
+node_modules
+.pnpm-store
+
+# next.js
+.next
+out
+
+# testing
+coverage
+
+# env
+.env*.local
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local
+.vercel
 ```
 
 ---
@@ -148,7 +275,7 @@ ls -la "$PROJECT_PATH/.claude/"
 ```javascript
 Task({
   subagent_type: "tech-architect",
-  prompt: "ai-automation-saas 기술 검토 및 환경 셋업.",
+  prompt: "{프로젝트명} 기술 검토 및 환경 셋업.",
   model: "sonnet"
 })
 ```
@@ -158,9 +285,7 @@ Task({
 | 항목 | 값 |
 |-----|---|
 | 모델 | sonnet |
-| 평균 소요 시간 | 5-10분 |
 | 필요 도구 | Read, Write, Glob, Bash |
-| 권장 사용 시점 | 개발 시작 전 |
 
 ---
 

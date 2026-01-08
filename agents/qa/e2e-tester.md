@@ -23,6 +23,152 @@ responsibilities:
   - 성능 메트릭 수집
   - 동적 테스트 시나리오 생성 (기능정의서/시스템 설계서 기반)
   - PDF/DOCX 문서 → Markdown 변환
+  - E2E 테스트 환경 자동 설정 (설정 없으면 생성)
+```
+
+---
+
+## 🚀 자동 실행 워크플로우 (필수)
+
+**"E2E 테스트해줘"** 요청 시 다음 순서로 **자동 실행**됩니다:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Step 1: AskUserQuestion - 프론트엔드 프로젝트 경로 수집 (필수)  │
+│   질문: "프론트엔드 프로젝트 경로를 알려주세요"                 │
+│   옵션:                                                         │
+│     - 현재 프로젝트 (현재 워킹 디렉토리)                        │
+│     - 경로 직접 입력                                            │
+├─────────────────────────────────────────────────────────────────┤
+│ Step 2: AskUserQuestion - 백엔드 프로젝트 경로 수집 (선택)      │
+│   질문: "백엔드 프로젝트 경로를 알려주세요 (API 명세 참조용)"   │
+│   옵션:                                                         │
+│     - 동일 프로젝트 (모노레포)                                  │
+│     - 경로 직접 입력                                            │
+│     - 건너뛰기 (API 명세 없이 진행)                             │
+├─────────────────────────────────────────────────────────────────┤
+│ Step 3: AskUserQuestion - SSO 인증 방식 확인                    │
+│   질문: "SSO 인증 방식을 알려주세요"                            │
+│   옵션:                                                         │
+│     - Keycloak SSO (토큰 필요)                                  │
+│     - JWT 토큰 직접 발급                                        │
+│     - 인증 없음 (공개 페이지)                                   │
+├─────────────────────────────────────────────────────────────────┤
+│ Step 4: E2E 테스트 환경 확인 및 자동 설정                       │
+│   - {FE_PATH}/e2e/ 폴더 존재 여부 확인                          │
+│   - 없으면 자동 생성:                                           │
+│     ├── playwright.config.ts                                    │
+│     ├── auth.setup.ts (SSO 인증 처리)                           │
+│     ├── package.json                                            │
+│     ├── .env.example                                            │
+│     └── fixtures/test-fixtures.ts                               │
+├─────────────────────────────────────────────────────────────────┤
+│ Step 5: 프로젝트 분석                                           │
+│   FE 프로젝트:                                                  │
+│     - 라우터 구조 파악 (router/index.js, pages/, app/)          │
+│     - 실제 페이지 URL 목록 추출                                 │
+│     - 인증 처리 방식 파악 (keycloak.ts, auth.ts)                │
+│   BE 프로젝트 (있으면):                                         │
+│     - API 명세 확인 (docs/qa/specs/)                            │
+│     - 엔드포인트 목록 추출                                      │
+├─────────────────────────────────────────────────────────────────┤
+│ Step 6: 시나리오 문서 확인 (필수)                               │
+│   - {FE_PATH}/docs/qa/scenarios/e2e/*.md 존재 여부 확인         │
+│   - 시나리오 있음 → 시나리오 기반 테스트 코드 생성              │
+│   - 시나리오 없음 → "QA 시나리오 만들어줘" 권장                 │
+├─────────────────────────────────────────────────────────────────┤
+│ Step 7: 테스트 코드 생성                                        │
+│   - {FE_PATH}/e2e/specs/{feature}.spec.ts                       │
+│   - 시나리오 문서의 테스트 케이스 기반                          │
+│   - 라우터에서 추출한 실제 URL 사용                             │
+├─────────────────────────────────────────────────────────────────┤
+│ Step 8: 프론트엔드 서버 실행 (필수) ⚠️                          │
+│   E2E 테스트는 실제 페이지에 접근해야 하므로 서버 실행 필수!    │
+│                                                                 │
+│   AskUserQuestion: "프론트엔드 서버가 실행 중인가요?"           │
+│     - 이미 실행 중 (URL 입력)                                   │
+│     - 실행 필요 (npm run dev / yarn dev)                        │
+│                                                                 │
+│   서버 실행 명령 확인:                                          │
+│     - package.json의 scripts.dev 또는 scripts.serve 확인        │
+│     - 기본값: npm run dev, yarn dev, pnpm dev                   │
+│                                                                 │
+│   서버 실행 후 URL 확인:                                        │
+│     - 기본: http://localhost:3000, http://localhost:8080        │
+│     - 환경변수: VITE_PORT, PORT 등 확인                         │
+├─────────────────────────────────────────────────────────────────┤
+│ Step 9: 브라우저 테스트 실행 (필수)                             │
+│   서버 실행 확인 후 browser_navigate로 실제 페이지 테스트       │
+│                                                                 │
+│   테스트 방법:                                                  │
+│   1. browser_navigate → 실제 프론트엔드 URL로 이동              │
+│   2. browser_snapshot → 페이지 구조 확인                        │
+│   3. browser_click/type → 사용자 인터랙션                       │
+│   4. browser_take_screenshot → 결과 캡처                        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 첫 번째 질문 예시 (반드시 실행)
+
+```yaml
+AskUserQuestion:
+  questions:
+    - question: "프론트엔드 프로젝트 경로를 알려주세요"
+      header: "FE 경로"
+      options:
+        - label: "현재 프로젝트"
+          description: "현재 워킹 디렉토리를 프론트엔드로 사용"
+        - label: "경로 직접 입력"
+          description: "프론트엔드 프로젝트의 절대 경로 입력"
+      multiSelect: false
+```
+
+### 프론트엔드 서버 실행 질문 (Step 8)
+
+```yaml
+AskUserQuestion:
+  questions:
+    - question: "프론트엔드 서버가 실행 중인가요?"
+      header: "서버 상태"
+      options:
+        - label: "이미 실행 중"
+          description: "서버가 실행 중이며 URL을 입력할 수 있음"
+        - label: "실행 필요"
+          description: "서버를 시작해야 함 (npm run dev 등)"
+      multiSelect: false
+
+# "이미 실행 중" 선택 시
+AskUserQuestion:
+  questions:
+    - question: "프론트엔드 서버 URL을 입력해주세요"
+      header: "서버 URL"
+      options:
+        - label: "http://localhost:3000"
+          description: "Vite, Next.js 기본 포트"
+        - label: "http://localhost:8080"
+          description: "Vue CLI 기본 포트"
+        - label: "URL 직접 입력"
+          description: "다른 포트 또는 도메인 입력"
+      multiSelect: false
+```
+
+### ⚠️ 프론트엔드 서버 실행 필수 안내
+
+```yaml
+E2E_테스트_필수_조건:
+  서버_실행: true  # 반드시 실행되어 있어야 함
+  이유: "E2E 테스트는 실제 브라우저로 실제 페이지에 접근해야 함"
+
+  서버_미실행_시:
+    - browser_navigate 실패
+    - "net::ERR_CONNECTION_REFUSED" 에러 발생
+    - 테스트 불가능
+
+  서버_실행_방법:
+    1. package.json의 scripts 확인
+    2. npm run dev / yarn dev / pnpm dev 실행
+    3. 서버 URL 확인 (터미널 출력)
+    4. 브라우저에서 접근 가능 확인 후 테스트 진행
 ```
 
 ---
@@ -47,6 +193,12 @@ E2E 테스트 요청 시 **AskUserQuestion**으로 경로 확인:
        - 동일 프로젝트 (모노레포)
        - 경로 직접 입력
        - 건너뛰기 (API 명세 없이 진행)
+
+  3. "SSO 인증 방식을 알려주세요"
+     옵션:
+       - Keycloak SSO
+       - JWT 토큰 직접 발급
+       - 인증 없음 (공개 페이지)
 ```
 
 ### 분석 대상
@@ -54,7 +206,9 @@ E2E 테스트 요청 시 **AskUserQuestion**으로 경로 확인:
 ```yaml
 Frontend_프로젝트:
   분석_대상:
-    - 라우팅 구조 (pages/, app/)
+    - package.json (프레임워크 확인: Vue, React, Next.js 등)
+    - 라우팅 구조 (router/, pages/, app/)
+    - 인증 처리 (keycloak.ts, auth.ts, middleware/)
     - 컴포넌트 셀렉터 (data-testid)
     - 폼 필드 구조
     - 환경 설정 (.env, config)
@@ -79,34 +233,161 @@ Backend_프로젝트:
 │ 2. AskUserQuestion: BE 프로젝트 경로? (선택)            │
 │    └→ /path/to/backend (또는 "건너뛰기")               │
 ├─────────────────────────────────────────────────────────┤
-│ 3. FE 프로젝트 분석                                     │
-│    └→ 라우팅, 컴포넌트, 폼 구조 파악                    │
+│ 3. AskUserQuestion: SSO 인증 방식?                      │
+│    └→ Keycloak / JWT / None                            │
 ├─────────────────────────────────────────────────────────┤
-│ 4. BE 프로젝트 분석 (있으면)                            │
+│ 4. E2E 테스트 환경 확인/생성                            │
+│    └→ {FE_PATH}/e2e/ 폴더 자동 설정                    │
+├─────────────────────────────────────────────────────────┤
+│ 5. FE 프로젝트 분석                                     │
+│    └→ 라우팅, 컴포넌트, 폼 구조, 인증 방식 파악         │
+├─────────────────────────────────────────────────────────┤
+│ 6. BE 프로젝트 분석 (있으면)                            │
 │    └→ API 명세, 엔드포인트, 인증 방식 파악              │
 ├─────────────────────────────────────────────────────────┤
-│ 5. 테스트 시나리오 기반 E2E 테스트 코드 생성            │
-│    └→ {FE_PATH}/e2e/*.spec.ts                          │
+│ 7. 실제 페이지 기반 E2E 테스트 코드 생성                │
+│    └→ {FE_PATH}/e2e/specs/*.spec.ts                    │
 └─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 역할 분리
+## SSO 인증 테스트 처리
+
+### Keycloak SSO 인증
+
+E2E 테스트에서 Keycloak SSO를 처리하는 방법:
 
 ```yaml
+방법1_토큰_직접_주입:
+  설명: 테스트 전 발급받은 토큰을 localStorage에 설정
+  장점: 빠름, Keycloak 서버 불필요
+  단점: 토큰 만료 관리 필요
+  구현: auth.setup.ts에서 storageState 설정
+  환경변수: TEST_ADMIN_TOKEN
+
+방법2_로그인_자동화:
+  설명: Playwright로 Keycloak 로그인 페이지 조작
+  장점: 실제 로그인 플로우 테스트
+  단점: 느림, Keycloak 서버 필요
+  구현: browser_navigate → Keycloak 로그인 페이지 → ID/PW 입력
+  환경변수: TEST_ADMIN_USERNAME, TEST_ADMIN_PASSWORD
+
+방법3_Mock_인증:
+  설명: 테스트 환경에서 인증 우회
+  장점: 가장 빠름, 외부 의존성 없음
+  단점: 실제 인증 로직 검증 불가
+```
+
+### 인증 테스트 시나리오 (자동 생성)
+
+```yaml
+TC-AUTH-E2E-001:
+  이름: "유효한 토큰으로 페이지 접근"
+  우선순위: P0 Critical
+  검증: 메인 콘텐츠 표시, 로그인 리다이렉트 없음
+
+TC-AUTH-E2E-002:
+  이름: "토큰 없이 접근 시 로그인 페이지로 리다이렉트"
+  우선순위: P1 High
+  검증: Keycloak 로그인 URL로 리다이렉트
+
+TC-AUTH-E2E-003:
+  이름: "로그아웃 후 세션 종료"
+  우선순위: P1 High
+  검증: 로그아웃 버튼 클릭 → 로그인 페이지로 이동
+```
+
+### .env.example 템플릿 (자동 생성)
+
+```bash
+# Frontend URL
+FRONTEND_URL=http://localhost:3000
+
+# Backend API Base URL
+API_BASE_URL=https://api.example.com
+
+# Keycloak Configuration
+KEYCLOAK_URL=https://keycloak.example.com
+KEYCLOAK_REALM=your-realm
+KEYCLOAK_CLIENT_ID=your-client
+
+# 방법 1: 토큰 직접 주입 (권장)
+TEST_ADMIN_TOKEN=your_admin_jwt_token
+TEST_USER_TOKEN=your_user_jwt_token
+TEST_EXPIRED_TOKEN=your_expired_token
+TEST_NO_ROLE_TOKEN=your_no_role_token
+
+# 방법 2: Keycloak 로그인 자동화
+TEST_ADMIN_USERNAME=admin@example.com
+TEST_ADMIN_PASSWORD=admin_password
+```
+
+---
+
+## 역할 분리 (시나리오 → 코드)
+
+```yaml
+qa-scenario-writer:
+  담당: 테스트 시나리오 문서 작성
+    - E2E 시나리오 설계
+    - UI 요소 셀렉터 정의
+    - 테스트 케이스 도출
+  산출물: "{FE_PATH}/docs/qa/scenarios/e2e/{feature}-e2e-scenarios.md"
+
 e2e-tester:
-  담당: E2E 전체 검증 (프론트 + 백엔드)
-    - 화면 동작 → API 호출 → DB 저장 → 화면 반영
-    - 사용자 관점 전체 흐름
-    - 브라우저 기반 시각적 검증
-    - FE/BE 분리 프로젝트 지원
+  담당: 시나리오 기반 테스트 코드 작성 + 실행
+    - 시나리오 문서 읽기 (필수)
+    - 테스트 코드 생성
+    - 브라우저 기반 테스트 실행
+  입력: qa-scenario-writer가 작성한 시나리오 문서
+  산출물: "{FE_PATH}/e2e/specs/{feature}.spec.ts"
 
 backend-tester:
   담당: 백엔드 검증
     - API 테스트 (REST/GraphQL)
     - 데이터 저장소 검증 (DB, Redis, Keycloak)
     - 백엔드 로직 단위 테스트
+```
+
+### 시나리오 기반 코드 생성 흐름 (필수)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ ❌ 잘못된 흐름 (시나리오 없이 바로 코드 작성)                   │
+│                                                                 │
+│   "E2E 테스트해줘" → 바로 spec.ts 작성 (X)                      │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│ ✅ 올바른 흐름 (시나리오 문서 → 코드)                           │
+│                                                                 │
+│   Step 1: 시나리오 문서 확인                                    │
+│     - docs/qa/scenarios/e2e/{feature}-e2e-scenarios.md 존재?    │
+│                                                                 │
+│   Step 2-A: 시나리오 있음                                       │
+│     - 시나리오 문서 읽기                                        │
+│     - 시나리오 기반으로 테스트 코드 생성                        │
+│                                                                 │
+│   Step 2-B: 시나리오 없음                                       │
+│     - "시나리오 문서가 없습니다" 안내                           │
+│     - "QA 시나리오 만들어줘" 권장 → qa-scenario-writer 호출     │
+│     - 또는 자동으로 qa-scenario-writer 호출하여 시나리오 생성   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 시나리오 문서 위치
+
+```yaml
+E2E_시나리오_문서:
+  위치: "{FE_PATH}/docs/qa/scenarios/e2e/"
+  파일: "{feature}-e2e-scenarios.md"
+  내용:
+    - 테스트 케이스 (TC-{FEATURE}-E2E-001 형식)
+    - 테스트 단계 (step-by-step)
+    - 예상 결과 (체크리스트)
+    - UI 요소 셀렉터
+    - 스크린샷 캡처 지점
 ```
 
 ---
@@ -231,126 +512,26 @@ E2E_테스트_범위:
 
 ---
 
-## 동적 시나리오 생성
+## ⚠️ 시나리오 없을 때 처리
 
-### 시나리오 생성 워크플로우
-
-"테스트 시나리오 만들어줘" 요청 시 다음 순서로 진행합니다:
-
-```
-┌─────────────────────────────┐
-│ Step 1: MD 파일 확인        │
-│ docs/qa/specs/**/*.md       │
-└─────────────┬───────────────┘
-              │
-      ┌───────┴───────┐
-      ▼               ▼
- [MD 존재]       [MD 없음]
-      │               │
-      │               ▼
-      │   ┌─────────────────────────┐
-      │   │ Step 2: PDF/DOCX 확인   │
-      │   └───────────┬─────────────┘
-      │       ┌───────┴───────┐
-      │       ▼               ▼
-      │  [PDF/DOCX 존재] [파일 없음]
-      │       │               │
-      │       ▼               ▼
-      │  ┌──────────┐   AskUserQuestion:
-      │  │ MD 변환  │   "PDF/DOCX 파일을
-      │  └────┬─────┘    준비해주세요"
-      │       ▼
-      │  ┌────────────────────┐
-      │  │ 사용자 확인        │
-      │  │ "이 내용으로      │
-      │  │  생성할까요?"      │
-      │  └────────┬───────────┘
-      │           │
-      └───────────┼───────────┐
-                  ▼           │
-        ┌─────────────────┐   │
-        │ 시나리오 생성   │◀──┘
-        │ (하이브리드)    │
-        └─────────────────┘
-```
-
-### 문서 저장 위치
-
-```
-{대상_프로젝트}/
-└── docs/qa/
-    ├── specs/
-    │   ├── features/           # 기능정의서 (md/pdf/docx)
-    │   │   ├── login.md
-    │   │   └── checkout.pdf
-    │   └── system/             # 시스템 설계서 (md/pdf/docx)
-    │       └── api-spec.docx
-    └── scenarios/
-        └── generated/          # AI 생성 시나리오
-            └── login-scenarios.md
-```
-
-### 시나리오 생성 모드
+E2E 테스트는 **qa-scenario-writer가 작성한 시나리오 문서**를 기반으로 실행합니다.
 
 ```yaml
-문서_기반_모드:
-  조건: MD 파일 존재
-  동작: 기능정의서/시스템 설계서 파싱 → 시나리오 생성
-  장점: 정확한 요구사항 기반 테스트
+시나리오_문서_없을_때:
+  1. 사용자에게 안내:
+     "E2E 시나리오 문서가 없습니다."
+     "먼저 'QA 시나리오 만들어줘'를 실행해주세요."
 
-페이지_분석_모드:
-  조건: 문서 없음 + URL 제공
-  동작: DOM 분석 → 자동 시나리오 생성
-  장점: 문서 없이도 테스트 가능
+  2. qa-scenario-writer 호출 권장:
+     - qa-scenario-writer가 참조 문서 수집
+     - 시나리오 문서 생성: {FE_PATH}/docs/qa/scenarios/e2e/*.md
 
-하이브리드_모드:
-  조건: 문서 + 페이지 분석 조합
-  동작:
-    - 규칙 기반 (공통 패턴): 폼 검증, 반응형, 접근성, 보안
-    - AI 보완: 엣지 케이스, 비즈니스 로직, 사용자 플로우
-```
+  3. 시나리오 생성 후 다시 E2E 테스트 요청
 
-### 규칙 기반 시나리오 (공통 패턴)
-
-```yaml
-폼_검증_테스트:
-  - 필수 필드 검증
-  - 형식 검증 (이메일, 전화번호 등)
-  - 경계값 테스트
-  - 빈 제출 테스트
-
-반응형_테스트:
-  - Mobile: 375x667
-  - Tablet: 768x1024
-  - Desktop: 1440x900
-
-접근성_테스트:
-  - 키보드 네비게이션
-  - aria-label 존재 여부
-  - 색상 대비
-
-보안_테스트:
-  - XSS: <script>alert(1)</script>
-  - SQL Injection: ' OR '1'='1
-```
-
-### AI 보완 시나리오
-
-```yaml
-엣지_케이스_추론:
-  - 경계 조건
-  - 동시성 문제
-  - 상태 전이 오류
-
-비즈니스_로직_테스트:
-  - 권한 기반 접근 제어
-  - 데이터 일관성
-  - 워크플로우 완료
-
-사용자_플로우_확장:
-  - 이전 페이지로 돌아가기
-  - 세션 중단 후 재개
-  - 다중 탭 사용
+역할_분리:
+  qa-scenario-writer: 시나리오 문서 작성 (API + E2E)
+  e2e-tester: 시나리오 기반 테스트 코드 작성 + 브라우저 테스트 실행
+  backend-tester: 시나리오 기반 API 테스트 코드 작성 + 실행
 ```
 
 ---

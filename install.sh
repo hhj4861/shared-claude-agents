@@ -32,7 +32,7 @@ echo ""
 # -----------------------------------------------------------------------------
 # Step 0: Node.js 버전 확인 (MCP 서버용)
 # -----------------------------------------------------------------------------
-echo -e "${YELLOW}[0/6]${NC} Checking Node.js version..."
+echo -e "${YELLOW}[0/7]${NC} Checking Node.js version..."
 
 if ! command -v node &> /dev/null; then
     echo -e "       ${YELLOW}Warning:${NC} Node.js not found. MCP servers will not be built."
@@ -52,7 +52,7 @@ echo ""
 
 # 1. 현재 위치가 표준 위치가 아니면 복사/이동
 if [ "$SCRIPT_DIR" != "$SHARED_DIR" ]; then
-    echo -e "${YELLOW}[1/6]${NC} Installing to $SHARED_DIR..."
+    echo -e "${YELLOW}[1/7]${NC} Installing to $SHARED_DIR..."
 
     # 기존 디렉토리가 있으면 백업
     if [ -d "$SHARED_DIR" ]; then
@@ -65,11 +65,11 @@ if [ "$SCRIPT_DIR" != "$SHARED_DIR" ]; then
     cp -r "$SCRIPT_DIR" "$SHARED_DIR"
     echo -e "       ${GREEN}Done${NC}"
 else
-    echo -e "${GREEN}[1/6]${NC} Already in standard location"
+    echo -e "${GREEN}[1/7]${NC} Already in standard location"
 fi
 
 # 2. 기존 에이전트 확인 및 보호
-echo -e "${YELLOW}[2/6]${NC} Checking existing agents..."
+echo -e "${YELLOW}[2/7]${NC} Checking existing agents..."
 
 if [ -d "$AGENTS_LINK" ] && [ ! -L "$AGENTS_LINK" ]; then
     echo -e "       ${YELLOW}Warning:${NC} Existing agents folder found at $AGENTS_LINK"
@@ -123,13 +123,13 @@ fi
 echo -e "       ${GREEN}Done${NC}"
 
 # 3. Symlink 생성
-echo -e "${YELLOW}[3/6]${NC} Creating symlink..."
+echo -e "${YELLOW}[3/7]${NC} Creating symlink..."
 
 ln -s "$SHARED_DIR/agents" "$AGENTS_LINK"
 echo -e "       ${GREEN}Linked:${NC} $AGENTS_LINK -> $SHARED_DIR/agents"
 
 # 4. Standards/Skills/Rules 심볼릭 링크 (있으면)
-echo -e "${YELLOW}[4/6]${NC} Linking additional resources..."
+echo -e "${YELLOW}[4/7]${NC} Linking additional resources..."
 
 # Standards
 if [ -d "$SHARED_DIR/standards" ]; then
@@ -167,7 +167,7 @@ fi
 echo -e "       ${GREEN}Done${NC}"
 
 # 5. SessionStart Hook 설정
-echo -e "${YELLOW}[5/6]${NC} Configuring SessionStart hook..."
+echo -e "${YELLOW}[5/7]${NC} Configuring SessionStart hook..."
 
 HOOK_COMMAND="cd \"\$HOME/.claude/shared-agents\" && git pull -q 2>/dev/null || true"
 
@@ -203,7 +203,7 @@ else
 fi
 
 # 6. MCP 서버 빌드 및 설정
-echo -e "${YELLOW}[6/6]${NC} Building MCP servers..."
+echo -e "${YELLOW}[6/7]${NC} Building MCP servers..."
 
 if [ "$BUILD_MCP" = true ] && [ -d "$MCP_SERVERS_DIR" ]; then
     MCP_SERVERS_BUILT=()
@@ -286,6 +286,194 @@ fi
 echo ""
 
 # 완료
+# -----------------------------------------------------------------------------
+# Step 7: 프로젝트 초기화 옵션
+# -----------------------------------------------------------------------------
+echo ""
+echo -e "${YELLOW}[7/7]${NC} Project initialization..."
+echo ""
+echo "Would you like to initialize projects with shared agents?"
+echo "This will create .claude/ folder and link agents in your project."
+echo ""
+echo "Tip: For FE/BE separated projects, initialize both:"
+echo "  - Frontend project: E2E tests (Playwright)"
+echo "  - Backend project: API tests"
+echo ""
+
+# 프로젝트 초기화 함수
+init_project() {
+    local PROJECT_PATH="$1"
+    local PROJECT_TYPE="$2"  # fe, be, or fullstack
+
+    # 절대 경로로 변환
+    if [[ "$PROJECT_PATH" != /* ]]; then
+        PROJECT_PATH="$(pwd)/$PROJECT_PATH"
+    fi
+
+    if [ ! -d "$PROJECT_PATH" ]; then
+        echo -e "       ${RED}Error:${NC} Project path does not exist: $PROJECT_PATH"
+        return 1
+    fi
+
+    echo -e "       Initializing project ($PROJECT_TYPE): $PROJECT_PATH"
+
+    # .claude 폴더 생성
+    mkdir -p "$PROJECT_PATH/.claude"
+
+    # agents 심볼릭 링크
+    if [ -L "$PROJECT_PATH/.claude/agents" ]; then
+        rm "$PROJECT_PATH/.claude/agents"
+    fi
+    if [ ! -d "$PROJECT_PATH/.claude/agents" ]; then
+        ln -s "$SHARED_DIR/agents" "$PROJECT_PATH/.claude/agents"
+        echo -e "       ${GREEN}✓${NC} Linked agents"
+    fi
+
+    # standards 심볼릭 링크
+    if [ -L "$PROJECT_PATH/.claude/standards" ]; then
+        rm "$PROJECT_PATH/.claude/standards"
+    fi
+    if [ ! -d "$PROJECT_PATH/.claude/standards" ]; then
+        ln -s "$SHARED_DIR/standards" "$PROJECT_PATH/.claude/standards"
+        echo -e "       ${GREEN}✓${NC} Linked standards"
+    fi
+
+    # skills 심볼릭 링크
+    if [ -L "$PROJECT_PATH/.claude/skills" ]; then
+        rm "$PROJECT_PATH/.claude/skills"
+    fi
+    if [ ! -d "$PROJECT_PATH/.claude/skills" ]; then
+        ln -s "$SHARED_DIR/skills" "$PROJECT_PATH/.claude/skills"
+        echo -e "       ${GREEN}✓${NC} Linked skills"
+    fi
+
+    # docs/qa/specs 복사 (테스트 시나리오 등)
+    if [ -d "$SHARED_DIR/docs/qa/specs" ]; then
+        mkdir -p "$PROJECT_PATH/docs/qa"
+        if [ ! -d "$PROJECT_PATH/docs/qa/specs" ]; then
+            cp -r "$SHARED_DIR/docs/qa/specs" "$PROJECT_PATH/docs/qa/"
+            echo -e "       ${GREEN}✓${NC} Copied QA specs and test scenarios"
+        else
+            echo -e "       ${YELLOW}⚠️${NC}  docs/qa/specs already exists, skipped"
+        fi
+    fi
+
+    # CLAUDE.md 생성 (타입별로 다르게)
+    if [ ! -f "$PROJECT_PATH/CLAUDE.md" ]; then
+        if [ "$PROJECT_TYPE" = "fe" ]; then
+            cat > "$PROJECT_PATH/CLAUDE.md" << 'CLAUDEMD'
+# Frontend Project Instructions
+
+## Overview
+이 프로젝트는 shared-claude-agents와 연동되어 있습니다. (Frontend)
+
+## Available Agents
+- **frontend-dev**: 프론트엔드 개발
+- **e2e-tester**: E2E 테스트 실행 (Playwright)
+- **qa-scenario-writer**: QA 시나리오 작성
+
+## E2E Testing
+- `docs/qa/specs/` 폴더에 테스트 시나리오가 있습니다.
+- E2E 테스트 코드는 `e2e/` 폴더에 생성됩니다.
+
+## Usage
+```
+"E2E 테스트 코드 작성해줘"
+"UI 컴포넌트 개발해줘"
+"테스트 시나리오 기반으로 Playwright 테스트 만들어줘"
+```
+CLAUDEMD
+        elif [ "$PROJECT_TYPE" = "be" ]; then
+            cat > "$PROJECT_PATH/CLAUDE.md" << 'CLAUDEMD'
+# Backend Project Instructions
+
+## Overview
+이 프로젝트는 shared-claude-agents와 연동되어 있습니다. (Backend)
+
+## Available Agents
+- **backend-dev**: 백엔드 개발
+- **backend-tester**: API 테스트
+- **qa-scenario-writer**: QA 시나리오 작성
+
+## API Testing
+- `docs/qa/specs/` 폴더에 API 명세와 테스트 시나리오가 있습니다.
+- API 테스트 코드는 `tests/` 또는 `src/test/` 폴더에 생성됩니다.
+
+## Usage
+```
+"API 테스트 코드 작성해줘"
+"테스트 시나리오 기반으로 API 테스트 만들어줘"
+"백엔드 로직 개발해줘"
+```
+CLAUDEMD
+        else
+            cat > "$PROJECT_PATH/CLAUDE.md" << 'CLAUDEMD'
+# Project Instructions
+
+## Overview
+이 프로젝트는 shared-claude-agents와 연동되어 있습니다.
+
+## Available Agents
+- **qa-scenario-writer**: QA 시나리오 작성
+- **e2e-tester**: E2E 테스트 실행 (Playwright)
+- **backend-tester**: API 테스트
+- **frontend-dev**: 프론트엔드 개발
+- **backend-dev**: 백엔드 개발
+
+## Test Scenarios
+- `docs/qa/specs/` 폴더에 테스트 시나리오가 있습니다.
+
+## Usage
+```
+"테스트 시나리오 작성해줘"
+"E2E 테스트 코드 작성해줘"
+"API 테스트해줘"
+```
+CLAUDEMD
+        fi
+        echo -e "       ${GREEN}✓${NC} Created CLAUDE.md ($PROJECT_TYPE)"
+    fi
+
+    echo -e "       ${GREEN}✓${NC} Project initialized: $PROJECT_PATH"
+    return 0
+}
+
+# 프로젝트 타입 선택
+echo "Select project setup type:"
+echo "  1) Single fullstack project"
+echo "  2) Separate FE/BE projects"
+echo "  3) Skip project initialization"
+echo ""
+read -p "Select option (1/2/3): " -n 1 -r SETUP_TYPE
+echo ""
+
+case $SETUP_TYPE in
+    1)
+        read -p "Enter project path: " PROJECT_PATH
+        if [ -n "$PROJECT_PATH" ]; then
+            init_project "$PROJECT_PATH" "fullstack"
+        fi
+        ;;
+    2)
+        echo ""
+        read -p "Enter FRONTEND project path: " FE_PATH
+        if [ -n "$FE_PATH" ]; then
+            init_project "$FE_PATH" "fe"
+        fi
+        echo ""
+        read -p "Enter BACKEND project path: " BE_PATH
+        if [ -n "$BE_PATH" ]; then
+            init_project "$BE_PATH" "be"
+        fi
+        ;;
+    3)
+        echo -e "       ${YELLOW}Skipped${NC} - No project specified"
+        ;;
+    *)
+        echo -e "       ${YELLOW}Skipped${NC} - Invalid option"
+        ;;
+esac
+
 echo ""
 echo -e "${GREEN}================================================${NC}"
 echo -e "${GREEN}  Installation complete!${NC}"

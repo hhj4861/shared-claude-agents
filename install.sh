@@ -274,13 +274,22 @@ if command -v claude &> /dev/null; then
     # Playwright MCP (Microsoft 공식 - 브라우저 자동화 및 E2E 테스트)
     claude mcp remove -s user playwright 2>/dev/null || true
     if claude mcp add -s user playwright npx @playwright/mcp@latest 2>/dev/null; then
-        echo -e "       ${GREEN}✅ playwright registered (Microsoft official)${NC}"
+        echo -e "       ${GREEN}✅ playwright registered (Web E2E testing)${NC}"
     else
-        echo -e "       ${YELLOW}⚠️  playwright registration failed (try manually: claude mcp add -s user playwright npx @playwright/mcp@latest)${NC}"
+        echo -e "       ${YELLOW}⚠️  playwright registration failed${NC}"
+    fi
+
+    # Appium MCP (공식 - 모바일 앱 테스트 Android/iOS)
+    claude mcp remove -s user appium-mcp 2>/dev/null || true
+    if claude mcp add -s user appium-mcp -- npx -y appium-mcp@latest 2>/dev/null; then
+        echo -e "       ${GREEN}✅ appium-mcp registered (Mobile app testing)${NC}"
+    else
+        echo -e "       ${YELLOW}⚠️  appium-mcp registration failed${NC}"
     fi
 else
     echo -e "       ${YELLOW}⚠️  'claude' command not found. Please register external MCP servers manually:${NC}"
     echo -e "       claude mcp add -s user playwright npx @playwright/mcp@latest"
+    echo -e "       claude mcp add -s user appium-mcp -- npx -y appium-mcp@latest"
 fi
 
 echo ""
@@ -327,7 +336,8 @@ if [ -d "$SHARED_DIR/mcp-servers" ]; then
 fi
 
 # External MCP 서버
-echo -e "  ${GREEN}✅${NC} playwright (npx @playwright/mcp@latest)"
+echo -e "  ${GREEN}✅${NC} playwright (Web E2E - npx @playwright/mcp@latest)"
+echo -e "  ${GREEN}✅${NC} appium-mcp (Mobile App - npx appium-mcp@latest)"
 echo ""
 
 echo "Usage:"
@@ -337,7 +347,8 @@ echo "  - Override in project: .claude/agents/<name>/"
 echo ""
 echo "MCP Tools available after restart:"
 echo "  - doc-converter: convert_pdf_to_md, convert_docx_to_md, check_spec_files"
-echo "  - playwright: browser_navigate, browser_click, browser_snapshot, browser_take_screenshot, etc."
+echo "  - playwright: browser_navigate, browser_click, browser_snapshot, etc. (Web)"
+echo "  - appium-mcp: appium_start_session, appium_tap, appium_type, appium_screenshot, etc. (Mobile)"
 echo ""
 echo "Project-level setup:"
 echo "  ./scripts/init-project.sh <project-name>"

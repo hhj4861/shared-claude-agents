@@ -60,33 +60,27 @@ e2e-tester:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ Step 1: AskUserQuestion - 프로젝트 구조 확인 (필수)             │
-│   질문: "프로젝트 구조를 알려주세요"                            │
-│   옵션:                                                         │
-│     - 모노레포 (FE+BE 하나의 프로젝트)                          │
-│     - 분리됨 (FE, BE 별도 프로젝트)                             │
-├─────────────────────────────────────────────────────────────────┤
-│ Step 2-A: 모노레포인 경우                                       │
-│   - 현재 워킹 디렉토리를 FE+BE 프로젝트로 사용                  │
-│   - src/frontend/, src/backend/ 등 구조 파악                    │
-├─────────────────────────────────────────────────────────────────┤
-│ Step 2-B: 분리된 경우                                           │
-│   AskUserQuestion: "백엔드 프로젝트 경로를 알려주세요"          │
+│ Step 1: AskUserQuestion - 프로젝트 경로 입력 (필수)             │
+│   질문 1: "백엔드 프로젝트 경로를 알려주세요"                   │
 │     - 현재 프로젝트 (현재 워킹 디렉토리)                        │
 │     - 경로 직접 입력                                            │
 │                                                                 │
-│   AskUserQuestion: "프론트엔드 프로젝트 경로를 알려주세요"      │
+│   질문 2: "프론트엔드 프로젝트 경로를 알려주세요"               │
+│     - 현재 프로젝트 (현재 워킹 디렉토리)                        │
 │     - 경로 직접 입력                                            │
 │     - 건너뛰기 (API 테스트만 진행)                              │
+│                                                                 │
+│   ⚡ 자동 판단: BE_PATH == FE_PATH → 모노레포                   │
+│                BE_PATH != FE_PATH → 분리된 프로젝트             │
 ├─────────────────────────────────────────────────────────────────┤
-│ Step 3: AskUserQuestion - SSO 인증 방식 확인                    │
+│ Step 2: AskUserQuestion - SSO 인증 방식 확인                    │
 │   질문: "SSO 인증 방식을 알려주세요"                            │
 │   옵션:                                                         │
 │     - Keycloak SSO                                              │
 │     - JWT 토큰 직접 발급                                        │
 │     - 인증 없음 (공개 API)                                      │
 ├─────────────────────────────────────────────────────────────────┤
-│ Step 4: AskUserQuestion - 참조 문서 유형 확인                   │
+│ Step 3: AskUserQuestion - 참조 문서 유형 확인                   │
 │   질문: "시나리오 작성 시 참조할 문서를 선택해주세요"           │
 │   옵션 (복수 선택 가능):                                        │
 │     - 기능정의서 (PRD) - 프로젝트 내 또는 경로 입력             │
@@ -94,7 +88,7 @@ e2e-tester:
 │     - 화면설계서 (Figma/PDF)                                    │
 │     - 소스코드만 (문서 없음)                                    │
 ├─────────────────────────────────────────────────────────────────┤
-│ Step 5: AskUserQuestion - 문서 위치/경로 수집 (Step 4 선택별)   │
+│ Step 4: AskUserQuestion - 문서 위치/경로 수집 (Step 3 선택별)   │
 │   각 문서 유형에 대해 반복:                                     │
 │   1) 첫 번째 문서 위치/URL 입력 받기                            │
 │   2) "추가 문서가 있나요?" 질문 (Yes/No)                        │
@@ -108,7 +102,7 @@ e2e-tester:
 │     - "추가 Confluence 문서가 있나요?" → No                     │
 │     - 다음 문서 유형 처리                                       │
 ├─────────────────────────────────────────────────────────────────┤
-│ Step 6: 문서 수집 및 분석 (MCP 연동)                            │
+│ Step 5: 문서 수집 및 분석 (MCP 연동)                            │
 │   문서 유형별 MCP 도구 매핑:                                    │
 │   - 프로젝트 내 파일: Read로 읽기                               │
 │   - PDF: convert_pdf_to_md (doc-converter MCP)                  │
@@ -120,32 +114,21 @@ e2e-tester:
 │   - 기타 외부 URL: WebFetch로 내용 가져오기                     │
 │   - 문서 없음: 소스코드 직접 분석                               │
 ├─────────────────────────────────────────────────────────────────┤
-│ Step 7: 프로젝트 분석 (소스코드)                                │
+│ Step 6: 프로젝트 분석 (소스코드)                                │
 │   BE 프로젝트: API 엔드포인트, 컨트롤러, 인증 방식 파악         │
 │   FE 프로젝트: 라우팅, 컴포넌트, 폼 구조 파악 (있으면)          │
 ├─────────────────────────────────────────────────────────────────┤
-│ Step 8: 시나리오 문서 생성                                      │
-│   - {BE_PATH}/docs/qa/scenarios/api/*.md (API 시나리오)         │
-│   - {FE_PATH}/docs/qa/scenarios/e2e/*.md (E2E 시나리오)         │
+│ Step 7: 시나리오 문서 생성                                      │
+│   BE_PATH == FE_PATH (모노레포):                                │
+│     - {PATH}/docs/qa/scenarios/api/*.md (API 시나리오)          │
+│     - {PATH}/docs/qa/scenarios/e2e/*.md (E2E 시나리오)          │
+│   BE_PATH != FE_PATH (분리됨):                                  │
+│     - {BE_PATH}/docs/qa/scenarios/api/*.md (API 시나리오)       │
+│     - {FE_PATH}/docs/qa/scenarios/e2e/*.md (E2E 시나리오)       │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 첫 번째 질문 예시 (반드시 실행)
-
-```yaml
-AskUserQuestion:
-  questions:
-    - question: "프로젝트 구조를 알려주세요"
-      header: "프로젝트 구조"
-      options:
-        - label: "모노레포"
-          description: "FE+BE가 하나의 프로젝트에 있음 (예: src/frontend, src/backend)"
-        - label: "분리됨"
-          description: "프론트엔드와 백엔드가 별도 프로젝트로 분리됨"
-      multiSelect: false
-```
-
-### 분리된 경우 추가 질문
+### Step 1: 프로젝트 경로 질문 (반드시 실행)
 
 ```yaml
 AskUserQuestion:
@@ -162,6 +145,8 @@ AskUserQuestion:
     - question: "프론트엔드 프로젝트 경로를 알려주세요"
       header: "FE 경로"
       options:
+        - label: "현재 프로젝트"
+          description: "현재 워킹 디렉토리가 프론트엔드 프로젝트"
         - label: "경로 직접 입력"
           description: "프론트엔드 프로젝트의 절대 경로 입력"
         - label: "건너뛰기"
@@ -169,7 +154,34 @@ AskUserQuestion:
       multiSelect: false
 ```
 
-### 참조 문서 질문 (Step 4)
+### 프로젝트 구조 자동 판단
+
+```yaml
+자동_판단_로직:
+  입력값:
+    BE_PATH: "{사용자 입력 BE 경로}"
+    FE_PATH: "{사용자 입력 FE 경로}"
+
+  판단:
+    BE_PATH == FE_PATH:
+      결과: 모노레포
+      시나리오_위치: "{PATH}/docs/qa/scenarios/"
+      설명: "FE/BE가 동일 프로젝트 내에 있음"
+
+    BE_PATH != FE_PATH:
+      결과: 분리된 프로젝트
+      API_시나리오: "{BE_PATH}/docs/qa/scenarios/api/"
+      E2E_시나리오: "{FE_PATH}/docs/qa/scenarios/e2e/"
+      설명: "FE/BE가 별도 프로젝트로 분리됨"
+
+    FE_PATH == "건너뛰기":
+      결과: API 테스트만
+      API_시나리오: "{BE_PATH}/docs/qa/scenarios/api/"
+      E2E_시나리오: 생성 안함
+      설명: "E2E 테스트 시나리오 제외"
+```
+
+### 참조 문서 질문 (Step 3)
 
 ```yaml
 AskUserQuestion:
@@ -388,15 +400,25 @@ URL_패턴_감지:
 ```yaml
 시나리오_생성_입력:
   1_프로젝트_구조:
-    모노레포:
-      BE_PATH: "{현재_워킹_디렉토리}"
-      FE_PATH: "{현재_워킹_디렉토리}"
-      시나리오_위치: "docs/qa/scenarios/"
-    분리됨:
+    # 항상 사용자에게 BE_PATH, FE_PATH 입력받음
+    # BE_PATH == FE_PATH 면 모노레포로 자동 판단
+
+    BE_PATH == FE_PATH (모노레포):
+      BE_PATH: "{사용자_입력_경로}"
+      FE_PATH: "{사용자_입력_경로}"  # 동일 경로
+      시나리오_위치: "{PATH}/docs/qa/scenarios/"
+
+    BE_PATH != FE_PATH (분리됨):
       BE_PATH: "{사용자_입력_BE_경로}"
       FE_PATH: "{사용자_입력_FE_경로}"
       API_시나리오_위치: "{BE_PATH}/docs/qa/scenarios/api/"
       E2E_시나리오_위치: "{FE_PATH}/docs/qa/scenarios/e2e/"
+
+    FE_PATH == 건너뛰기 (API만):
+      BE_PATH: "{사용자_입력_BE_경로}"
+      FE_PATH: null
+      API_시나리오_위치: "{BE_PATH}/docs/qa/scenarios/api/"
+      E2E_시나리오: 생성 안함
 
   2_인증_방식:
     Keycloak:

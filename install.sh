@@ -438,41 +438,57 @@ CLAUDEMD
     return 0
 }
 
-# 프로젝트 타입 선택
-echo "Select project setup type:"
-echo "  1) Single fullstack project"
-echo "  2) Separate FE/BE projects"
-echo "  3) Skip project initialization"
-echo ""
-read -p "Select option (1/2/3): " -n 1 -r SETUP_TYPE
+# 프로젝트 경로 입력 (여러 개 가능)
+echo "Enter project paths to initialize (one per line)."
+echo "Press Enter twice when done, or Enter immediately to skip."
 echo ""
 
-case $SETUP_TYPE in
-    1)
-        read -p "Enter project path: " PROJECT_PATH
-        if [ -n "$PROJECT_PATH" ]; then
-            init_project "$PROJECT_PATH" "fullstack"
+PROJECT_COUNT=0
+while true; do
+    read -p "Project path ($((PROJECT_COUNT + 1))): " PROJECT_PATH
+
+    # 빈 입력이면 종료
+    if [ -z "$PROJECT_PATH" ]; then
+        break
+    fi
+
+    # 프로젝트 타입 자동 감지 또는 질문
+    if [ -d "$PROJECT_PATH" ]; then
+        # package.json으로 프론트엔드 감지
+        if [ -f "$PROJECT_PATH/package.json" ]; then
+            if grep -q '"next"\|"react"\|"vue"\|"@angular"' "$PROJECT_PATH/package.json" 2>/dev/null; then
+                PROJECT_TYPE="fe"
+                echo -e "       ${BLUE}Detected: Frontend project${NC}"
+            elif grep -q '"express"\|"fastify"\|"@nestjs"' "$PROJECT_PATH/package.json" 2>/dev/null; then
+                PROJECT_TYPE="be"
+                echo -e "       ${BLUE}Detected: Backend project${NC}"
+            else
+                PROJECT_TYPE="fullstack"
+            fi
+        # Java/Kotlin 백엔드 감지
+        elif [ -f "$PROJECT_PATH/build.gradle" ] || [ -f "$PROJECT_PATH/pom.xml" ]; then
+            PROJECT_TYPE="be"
+            echo -e "       ${BLUE}Detected: Backend project (Java/Kotlin)${NC}"
+        # Python 백엔드 감지
+        elif [ -f "$PROJECT_PATH/requirements.txt" ] || [ -f "$PROJECT_PATH/pyproject.toml" ]; then
+            PROJECT_TYPE="be"
+            echo -e "       ${BLUE}Detected: Backend project (Python)${NC}"
+        else
+            PROJECT_TYPE="fullstack"
         fi
-        ;;
-    2)
-        echo ""
-        read -p "Enter FRONTEND project path: " FE_PATH
-        if [ -n "$FE_PATH" ]; then
-            init_project "$FE_PATH" "fe"
-        fi
-        echo ""
-        read -p "Enter BACKEND project path: " BE_PATH
-        if [ -n "$BE_PATH" ]; then
-            init_project "$BE_PATH" "be"
-        fi
-        ;;
-    3)
-        echo -e "       ${YELLOW}Skipped${NC} - No project specified"
-        ;;
-    *)
-        echo -e "       ${YELLOW}Skipped${NC} - Invalid option"
-        ;;
-esac
+
+        init_project "$PROJECT_PATH" "$PROJECT_TYPE"
+        ((PROJECT_COUNT++))
+    else
+        echo -e "       ${RED}Error:${NC} Path does not exist: $PROJECT_PATH"
+    fi
+done
+
+if [ $PROJECT_COUNT -eq 0 ]; then
+    echo -e "       ${YELLOW}Skipped${NC} - No projects initialized"
+else
+    echo -e "       ${GREEN}Initialized $PROJECT_COUNT project(s)${NC}"
+fi
 
 echo ""
 echo -e "${GREEN}================================================${NC}"

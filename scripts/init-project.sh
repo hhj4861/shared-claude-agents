@@ -7,9 +7,9 @@
 #   ./scripts/init-project.sh ~/projects/my-app
 #
 # 기능:
-#   - 프로젝트에 .claude/agents 심볼릭 링크 생성
-#   - 프로젝트 구조 분석 후 에이전트 최적화 제안 (선택)
-#   - standards, skills, rules 연동 (선택)
+#   - 프로젝트에 .claude/ 디렉토리에 공유 리소스 복사
+#   - Claude Code는 symlink를 따라가지 않으므로 실제 파일 복사
+#   - agents, skills, scripts, standards, rules 연동
 #
 
 set -e
@@ -253,6 +253,29 @@ if [ -f "$PROJECT_PATH/.gitignore" ]; then
             echo -e "${GREEN}✓${NC} Added .claude/ to .gitignore"
         fi
     fi
+fi
+
+# CLAUDE.md 생성 (없는 경우)
+if [ ! -f "$PROJECT_PATH/CLAUDE.md" ]; then
+    PROJECT_NAME=$(basename "$PROJECT_PATH")
+    cat > "$PROJECT_PATH/CLAUDE.md" << EOF
+# $PROJECT_NAME
+
+## 사용 가능한 Skills
+
+- \`/qa-scenario\` - QA 테스트 시나리오 생성
+- \`/api-test\` - API 테스트 코드 생성 및 실행
+- \`/e2e-test\` - E2E 테스트 코드 생성 및 실행
+- \`/commit\` - Git 커밋 생성
+- \`/review-pr\` - PR 리뷰
+
+## 사용 가능한 Agents
+
+- \`qa-director\` - QA 파이프라인 총괄
+- \`frontend-dev\` - 프론트엔드 개발
+- \`backend-dev\` - 백엔드 개발
+EOF
+    echo -e "${GREEN}✓${NC} Created CLAUDE.md"
 fi
 
 # 완료

@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QA 시나리오 생성 설정</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      overflow: hidden;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #4a5568 0%, #2d3748 100%);
+      color: white;
+      padding: 24px 32px;
+    }
+
+    .header h1 {
+      font-size: 24px;
+      font-weight: 600;
+    }
+
+    .header p {
+      margin-top: 8px;
+      opacity: 0.8;
+      font-size: 14px;
+    }
+
+    .form-content {
+      padding: 32px;
+    }
+
+    .section {
+      margin-bottom: 32px;
+    }
+
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #2d3748;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-title::before {
+      content: '';
+      width: 4px;
+      height: 20px;
+      background: #667eea;
+      border-radius: 2px;
+    }
+
+    .input-group {
+      margin-bottom: 16px;
+    }
+
+    .input-group label {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      color: #4a5568;
+      margin-bottom: 6px;
+    }
+
+    .input-group input[type="text"] {
+      width: 100%;
+      padding: 12px 16px;
+      border: 2px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 14px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .input-group input[type="text"]:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .radio-group {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .radio-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 20px;
+      border: 2px solid #e2e8f0;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .radio-option:hover {
+      border-color: #667eea;
+      background: #f7fafc;
+    }
+
+    .radio-option input[type="radio"] {
+      accent-color: #667eea;
+    }
+
+    .radio-option.selected {
+      border-color: #667eea;
+      background: #ebf4ff;
+    }
+
+    .doc-list {
+      border: 2px solid #e2e8f0;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .doc-category {
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .doc-category:last-child {
+      border-bottom: none;
+    }
+
+    .doc-category-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: #f7fafc;
+      cursor: pointer;
+    }
+
+    .doc-category-header:hover {
+      background: #edf2f7;
+    }
+
+    .doc-category-title {
+      font-weight: 500;
+      color: #2d3748;
+    }
+
+    .add-btn {
+      padding: 6px 12px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .add-btn:hover {
+      background: #5a67d8;
+    }
+
+    .doc-items {
+      padding: 12px 16px;
+      display: none;
+    }
+
+    .doc-items.open {
+      display: block;
+    }
+
+    .doc-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: #f7fafc;
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+
+    .doc-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .doc-item input {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+
+    .doc-item input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .remove-btn {
+      padding: 6px 10px;
+      background: #fc8181;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .remove-btn:hover {
+      background: #f56565;
+    }
+
+    .empty-message {
+      color: #a0aec0;
+      font-size: 13px;
+      font-style: italic;
+    }
+
+    .submit-section {
+      padding: 24px 32px;
+      background: #f7fafc;
+      border-top: 1px solid #e2e8f0;
+    }
+
+    .submit-btn {
+      width: 100%;
+      padding: 16px 32px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .submit-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+    }
+
+    .submit-btn:disabled {
+      background: #a0aec0;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .success-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+
+    .success-overlay.show {
+      display: flex;
+    }
+
+    .success-modal {
+      background: white;
+      padding: 40px;
+      border-radius: 16px;
+      text-align: center;
+      max-width: 400px;
+    }
+
+    .success-icon {
+      width: 64px;
+      height: 64px;
+      background: #48bb78;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+      color: white;
+      font-size: 32px;
+    }
+
+    .success-modal h2 {
+      color: #2d3748;
+      margin-bottom: 12px;
+    }
+
+    .success-modal p {
+      color: #718096;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>QA 시나리오 생성 설정</h1>
+      <p>프로젝트 정보와 참조 문서를 입력하면 테스트 시나리오가 자동 생성됩니다.</p>
+    </div>
+
+    <form id="configForm">
+      <div class="form-content">
+        <!-- 프로젝트 경로 -->
+        <div class="section">
+          <h2 class="section-title">프로젝트 경로</h2>
+          <div class="input-group">
+            <label for="bePath">백엔드 프로젝트 경로 *</label>
+            <input type="text" id="bePath" name="be_path" placeholder="/path/to/backend-project" required>
+          </div>
+          <div class="input-group">
+            <label for="fePath">프론트엔드 프로젝트 경로 (E2E 테스트 시)</label>
+            <input type="text" id="fePath" name="fe_path" placeholder="/path/to/frontend-project (비워두면 API 테스트만)">
+          </div>
+          <p style="font-size: 12px; color: #718096; margin-top: 8px;">
+            💡 BE/FE 경로가 동일하면 모노레포로 자동 판단됩니다.
+          </p>
+        </div>
+
+        <!-- 테스트 대상 서버 -->
+        <div class="section">
+          <h2 class="section-title">테스트 대상 서버</h2>
+          <p style="font-size: 13px; color: #718096; margin-bottom: 16px;">
+            E2E/API 테스트가 실행될 서버 URL을 입력하세요. (개발서버, Preview, 스테이징 등)
+          </p>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <div class="input-group">
+              <label for="feUrl" style="display: flex; align-items: center; gap: 6px;">
+                <span style="font-size: 18px;">🌐</span> 프론트엔드 URL
+              </label>
+              <input type="text" id="feUrl" placeholder="https://dev.example.com"
+                     style="width: 100%; padding: 12px 14px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px;">
+              <p style="font-size: 11px; color: #a0aec0; margin-top: 4px;">E2E 테스트 시 브라우저가 접속할 URL</p>
+            </div>
+            <div class="input-group">
+              <label for="beUrl" style="display: flex; align-items: center; gap: 6px;">
+                <span style="font-size: 18px;">⚡</span> 백엔드 API URL
+              </label>
+              <input type="text" id="beUrl" placeholder="https://api-dev.example.com"
+                     style="width: 100%; padding: 12px 14px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px;">
+              <p style="font-size: 11px; color: #a0aec0; margin-top: 4px;">API 테스트 시 요청을 보낼 URL</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 인증 방식 -->
+        <div class="section">
+          <h2 class="section-title">인증 방식</h2>
+          <div class="radio-group" style="flex-direction: column; gap: 16px;">
+            <!-- Keycloak SSO -->
+            <div class="auth-option-container" style="width: 100%;">
+              <label class="radio-option" style="width: 100%; padding: 16px 20px;">
+                <input type="radio" name="auth_type" value="keycloak" checked onchange="updateAuthFields()">
+                <div style="flex: 1;">
+                  <span style="font-weight: 600;">🔐 Keycloak SSO</span>
+                  <p style="font-size: 12px; color: #718096; margin-top: 2px;">ID/PW + OTP 인증</p>
+                </div>
+              </label>
+              <div id="keycloak-fields" class="auth-fields" style="margin-top: 0; padding: 20px; background: linear-gradient(to bottom, #f7fafc, #edf2f7); border-radius: 0 0 8px 8px; border: 2px solid #e2e8f0; border-top: none; display: block;">
+                <div class="input-group" style="margin-bottom: 16px;">
+                  <label style="font-size: 13px; color: #4a5568; font-weight: 500;">Keycloak URL</label>
+                  <input type="text" id="keycloakUrl" placeholder="https://auth.example.com/realms/my-realm"
+                         style="width: 100%; padding: 12px 14px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; margin-top: 6px;">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                  <div class="input-group">
+                    <label style="font-size: 13px; color: #4a5568; font-weight: 500;">Username</label>
+                    <input type="text" id="keycloakUsername" placeholder="test@example.com"
+                           style="width: 100%; padding: 12px 14px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; margin-top: 6px;">
+                  </div>
+                  <div class="input-group">
+                    <label style="font-size: 13px; color: #4a5568; font-weight: 500;">Password</label>
+                    <input type="password" id="keycloakPassword" placeholder="••••••••"
+                           style="width: 100%; padding: 12px 14px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; margin-top: 6px;">
+                  </div>
+                </div>
+                <div class="input-group" style="background: #fff; padding: 16px; border-radius: 8px; border: 1px dashed #cbd5e0;">
+                  <label style="font-size: 13px; color: #4a5568; font-weight: 500; display: flex; align-items: center; gap: 6px; margin-bottom: 12px;">
+                    <span style="font-size: 16px;">📱</span> OTP 인증 처리
+                  </label>
+                  <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <label style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: #f7fafc; border-radius: 6px; cursor: pointer;">
+                      <input type="radio" name="otp_method" value="none" checked style="accent-color: #667eea;">
+                      <span style="font-size: 13px;">OTP 없음 (테스트 계정에 OTP 비활성화됨)</span>
+                    </label>
+                    <label style="display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; background: #f7fafc; border-radius: 6px; cursor: pointer; flex-wrap: wrap;">
+                      <input type="radio" name="otp_method" value="secret" style="accent-color: #667eea; margin-top: 3px;">
+                      <span style="font-size: 13px;">TOTP Secret으로 자동 생성</span>
+                      <input type="text" id="keycloakTotpSecret" placeholder="JBSWY3DPEHPK3PXP"
+                             style="width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 12px; margin-top: 6px; font-family: monospace;"
+                             onclick="document.querySelector('input[value=secret]').checked = true;">
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: #f7fafc; border-radius: 6px; cursor: pointer;">
+                      <input type="radio" name="otp_method" value="manual" style="accent-color: #667eea;">
+                      <span style="font-size: 13px;">테스트 시 수동 입력 (브라우저 일시정지)</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- JWT 토큰 -->
+            <div class="auth-option-container" style="width: 100%;">
+              <label class="radio-option" style="width: 100%; padding: 16px 20px;">
+                <input type="radio" name="auth_type" value="jwt" onchange="updateAuthFields()">
+                <div style="flex: 1;">
+                  <span style="font-weight: 600;">🎫 JWT 토큰</span>
+                  <p style="font-size: 12px; color: #718096; margin-top: 2px;">미리 발급받은 토큰 사용</p>
+                </div>
+              </label>
+              <div id="jwt-fields" class="auth-fields" style="margin-top: 0; padding: 20px; background: linear-gradient(to bottom, #f7fafc, #edf2f7); border-radius: 0 0 8px 8px; border: 2px solid #e2e8f0; border-top: none; display: none;">
+                <div class="input-group">
+                  <label style="font-size: 13px; color: #4a5568; font-weight: 500;">Access Token</label>
+                  <textarea id="jwtToken" placeholder="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+                         style="width: 100%; padding: 12px 14px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 13px; margin-top: 6px; font-family: monospace; min-height: 80px; resize: vertical;"></textarea>
+                </div>
+              </div>
+            </div>
+
+            <!-- 인증 없음 -->
+            <label class="radio-option" style="width: 100%; padding: 16px 20px;">
+              <input type="radio" name="auth_type" value="none" onchange="updateAuthFields()">
+              <div style="flex: 1;">
+                <span style="font-weight: 600;">🌍 인증 없음</span>
+                <p style="font-size: 12px; color: #718096; margin-top: 2px;">공개 API 테스트</p>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- 분석 대상 (Git) -->
+        <div class="section">
+          <h2 class="section-title">분석 대상</h2>
+          <p style="font-size: 13px; color: #718096; margin-bottom: 16px;">
+            분석할 소스코드의 브랜치 또는 PR을 선택하세요.
+          </p>
+          <div class="radio-group" style="flex-direction: column; gap: 12px;">
+            <label class="radio-option" style="width: 100%;">
+              <input type="radio" name="git_target" value="current" checked>
+              <span>현재 브랜치</span>
+              <span style="color: #718096; font-size: 12px; margin-left: auto;">프로젝트의 현재 체크아웃된 브랜치</span>
+            </label>
+            <label class="radio-option" style="width: 100%; flex-wrap: wrap;">
+              <input type="radio" name="git_target" value="branch">
+              <span>브랜치 지정</span>
+              <input type="text" id="branchName" name="branch_name"
+                     placeholder="feature/new-login"
+                     style="flex: 1; margin-left: 16px; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 13px;"
+                     onclick="document.querySelector('input[value=branch]').checked = true; updateGitTargetStyle();">
+            </label>
+            <label class="radio-option" style="width: 100%; flex-wrap: wrap;">
+              <input type="radio" name="git_target" value="pr">
+              <span>PR</span>
+              <input type="text" id="prInput" name="pr_input"
+                     placeholder="123 또는 https://github.com/org/repo/pull/123"
+                     style="flex: 1; margin-left: 16px; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 13px;"
+                     onclick="document.querySelector('input[value=pr]').checked = true; updateGitTargetStyle();">
+            </label>
+          </div>
+          <p style="font-size: 12px; color: #718096; margin-top: 12px;">
+            💡 PR 번호만 입력하면 프로젝트 경로에서 Git repository를 자동 감지합니다.
+          </p>
+        </div>
+
+        <!-- 참조 문서 -->
+        <div class="section">
+          <h2 class="section-title">참조 문서</h2>
+          <p style="font-size: 13px; color: #718096; margin-bottom: 16px;">
+            시나리오 생성 시 참조할 문서의 URL 또는 파일 경로를 입력하세요. (여러 개 가능)
+          </p>
+
+          <div class="doc-list">
+            <!-- 기능정의서 -->
+            <div class="doc-category" data-type="prd">
+              <div class="doc-category-header" onclick="toggleCategory('prd')">
+                <span class="doc-category-title">📋 기능정의서 (PRD)</span>
+                <button type="button" class="add-btn" onclick="event.stopPropagation(); addDoc('prd')">+ 추가</button>
+              </div>
+              <div class="doc-items" id="prd-items">
+                <p class="empty-message">Confluence, Notion URL 또는 로컬 파일 경로</p>
+              </div>
+            </div>
+
+            <!-- API 명세서 -->
+            <div class="doc-category" data-type="api">
+              <div class="doc-category-header" onclick="toggleCategory('api')">
+                <span class="doc-category-title">🔌 API 명세서 (Swagger/OpenAPI)</span>
+                <button type="button" class="add-btn" onclick="event.stopPropagation(); addDoc('api')">+ 추가</button>
+              </div>
+              <div class="doc-items" id="api-items">
+                <p class="empty-message">Swagger URL, OpenAPI JSON/YAML 경로</p>
+              </div>
+            </div>
+
+            <!-- 화면설계서 -->
+            <div class="doc-category" data-type="design">
+              <div class="doc-category-header" onclick="toggleCategory('design')">
+                <span class="doc-category-title">🎨 화면설계서 (Figma/PDF)</span>
+                <button type="button" class="add-btn" onclick="event.stopPropagation(); addDoc('design')">+ 추가</button>
+              </div>
+              <div class="doc-items" id="design-items">
+                <p class="empty-message">Figma URL, PDF 파일 경로</p>
+              </div>
+            </div>
+
+            <!-- 정책서 -->
+            <div class="doc-category" data-type="policy">
+              <div class="doc-category-header" onclick="toggleCategory('policy')">
+                <span class="doc-category-title">📜 정책서 (보안/권한/비즈니스)</span>
+                <button type="button" class="add-btn" onclick="event.stopPropagation(); addDoc('policy')">+ 추가</button>
+              </div>
+              <div class="doc-items" id="policy-items">
+                <p class="empty-message">보안 정책, 권한 정책, 비즈니스 규칙 문서</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="submit-section">
+        <button type="submit" class="submit-btn">🚀 시나리오 생성 시작</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- 성공 모달 -->
+  <div class="success-overlay" id="successOverlay">
+    <div class="success-modal">
+      <div class="success-icon">✓</div>
+      <h2>설정 완료!</h2>
+      <p>시나리오 생성이 시작됩니다.<br>이 창을 닫아도 됩니다.</p>
+    </div>
+  </div>
+
+  <script>
+    const docs = {
+      prd: [],
+      api: [],
+      design: [],
+      policy: []
+    };
+
+    // 인증 방식에 따른 필드 표시/숨김
+    function updateAuthFields() {
+      const authType = document.querySelector('input[name="auth_type"]:checked').value;
+      document.getElementById('keycloak-fields').style.display = authType === 'keycloak' ? 'block' : 'none';
+      document.getElementById('jwt-fields').style.display = authType === 'jwt' ? 'block' : 'none';
+
+      // 라디오 버튼 스타일 업데이트
+      document.querySelectorAll('input[name="auth_type"]').forEach(r => {
+        r.closest('.radio-option').classList.remove('selected');
+      });
+      const checked = document.querySelector('input[name="auth_type"]:checked');
+      if (checked) {
+        checked.closest('.radio-option').classList.add('selected');
+      }
+    }
+
+    function toggleCategory(type) {
+      const items = document.getElementById(`${type}-items`);
+      items.classList.toggle('open');
+    }
+
+    function addDoc(type) {
+      const items = document.getElementById(`${type}-items`);
+
+      // 빈 메시지 제거
+      const emptyMsg = items.querySelector('.empty-message');
+      if (emptyMsg) emptyMsg.remove();
+
+      // 카테고리 열기
+      items.classList.add('open');
+
+      const index = docs[type].length;
+      docs[type].push('');
+
+      const docItem = document.createElement('div');
+      docItem.className = 'doc-item';
+      docItem.innerHTML = `
+        <input type="text" placeholder="URL 또는 파일 경로 입력"
+               onchange="updateDoc('${type}', ${index}, this.value)"
+               oninput="updateDoc('${type}', ${index}, this.value)">
+        <button type="button" class="remove-btn" onclick="removeDoc('${type}', ${index}, this.parentElement)">삭제</button>
+      `;
+
+      items.appendChild(docItem);
+      docItem.querySelector('input').focus();
+    }
+
+    function updateDoc(type, index, value) {
+      docs[type][index] = value;
+    }
+
+    function removeDoc(type, index, element) {
+      docs[type][index] = null;
+      element.remove();
+
+      const items = document.getElementById(`${type}-items`);
+      if (items.children.length === 0) {
+        const placeholders = {
+          prd: 'Confluence, Notion URL 또는 로컬 파일 경로',
+          api: 'Swagger URL, OpenAPI JSON/YAML 경로',
+          design: 'Figma URL, PDF 파일 경로',
+          policy: '보안 정책, 권한 정책, 비즈니스 규칙 문서'
+        };
+        items.innerHTML = `<p class="empty-message">${placeholders[type]}</p>`;
+      }
+    }
+
+    // 라디오 버튼 스타일링 (인증 방식)
+    document.querySelectorAll('input[name="auth_type"]').forEach(radio => {
+      radio.addEventListener('change', () => {
+        document.querySelectorAll('input[name="auth_type"]').forEach(r => {
+          r.closest('.radio-option').classList.remove('selected');
+        });
+        if (radio.checked) {
+          radio.closest('.radio-option').classList.add('selected');
+        }
+      });
+    });
+
+    // Git 대상 라디오 버튼 스타일링
+    function updateGitTargetStyle() {
+      document.querySelectorAll('input[name="git_target"]').forEach(r => {
+        r.closest('.radio-option').classList.remove('selected');
+      });
+      const checked = document.querySelector('input[name="git_target"]:checked');
+      if (checked) {
+        checked.closest('.radio-option').classList.add('selected');
+      }
+    }
+
+    document.querySelectorAll('input[name="git_target"]').forEach(radio => {
+      radio.addEventListener('change', updateGitTargetStyle);
+    });
+
+    // 초기 선택 스타일
+    document.querySelector('input[name="auth_type"]:checked')?.closest('.radio-option')?.classList.add('selected');
+    document.querySelector('input[name="git_target"]:checked')?.closest('.radio-option')?.classList.add('selected');
+
+    // 폼 제출
+    document.getElementById('configForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const bePath = document.getElementById('bePath').value.trim();
+      const fePath = document.getElementById('fePath').value.trim();
+
+      // 테스트 대상 서버
+      const feUrl = document.getElementById('feUrl').value.trim();
+      const beUrl = document.getElementById('beUrl').value.trim();
+
+      const authType = document.querySelector('input[name="auth_type"]:checked').value;
+
+      // 인증 정보 수집
+      let auth = { type: authType };
+      if (authType === 'keycloak') {
+        auth.keycloak_url = document.getElementById('keycloakUrl').value.trim();
+        auth.username = document.getElementById('keycloakUsername').value.trim();
+        auth.password = document.getElementById('keycloakPassword').value.trim();
+
+        // OTP 처리 방법
+        const otpMethod = document.querySelector('input[name="otp_method"]:checked').value;
+        auth.otp_method = otpMethod;
+        if (otpMethod === 'secret') {
+          auth.totp_secret = document.getElementById('keycloakTotpSecret').value.trim();
+        }
+      } else if (authType === 'jwt') {
+        auth.token = document.getElementById('jwtToken').value.trim();
+      }
+
+      // Git 대상 정보
+      const gitTargetType = document.querySelector('input[name="git_target"]:checked').value;
+      const branchName = document.getElementById('branchName').value.trim();
+      const prInput = document.getElementById('prInput').value.trim();
+
+      // 문서 목록 정리 (null, 빈 문자열 제거)
+      const cleanDocs = (arr) => arr.filter(d => d && d.trim());
+
+      // Git 대상 객체 생성
+      let gitTarget = { type: gitTargetType };
+      if (gitTargetType === 'branch' && branchName) {
+        gitTarget.branch = branchName;
+      } else if (gitTargetType === 'pr' && prInput) {
+        // URL인지 번호인지 판단
+        if (prInput.startsWith('http')) {
+          gitTarget.pr_url = prInput;
+        } else {
+          gitTarget.pr_number = prInput;
+        }
+      }
+
+      const config = {
+        be_path: bePath,
+        fe_path: fePath || null,
+        test_server: {
+          fe_url: feUrl || null,
+          be_url: beUrl || null
+        },
+        auth: auth,
+        project_type: (bePath === fePath && fePath) ? 'monorepo' : (fePath ? 'separated' : 'api_only'),
+        git_target: gitTarget,
+        documents: {
+          prd: cleanDocs(docs.prd),
+          api: cleanDocs(docs.api),
+          design: cleanDocs(docs.design),
+          policy: cleanDocs(docs.policy)
+        }
+      };
+
+      try {
+        const response = await fetch('/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config)
+        });
+
+        if (response.ok) {
+          document.getElementById('successOverlay').classList.add('show');
+        }
+      } catch (err) {
+        alert('오류가 발생했습니다: ' + err.message);
+      }
+    });
+  </script>
+</body>
+</html>

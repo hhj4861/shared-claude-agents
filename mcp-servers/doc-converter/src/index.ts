@@ -68,6 +68,31 @@ const tools: Tool[] = [
     },
   },
   {
+    name: "format_markdown",
+    description:
+      "Format raw text (from Confluence, web pages, etc.) into clean Markdown. Adds proper headings, tables, lists, and structure. Content is preserved, only formatting is changed.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        content: {
+          type: "string",
+          description: "Raw text content to format into Markdown",
+        },
+        output_path: {
+          type: "string",
+          description:
+            "Optional: Output path for the Markdown file. If not provided, returns the content.",
+        },
+        source_type: {
+          type: "string",
+          description:
+            "Optional: Source type hint (confluence, jira, web). Helps optimize formatting.",
+        },
+      },
+      required: ["content"],
+    },
+  },
+  {
     name: "check_spec_files",
     description:
       "Check for specification files (md/pdf/docx) in a project's docs/qa/specs directory",
@@ -120,6 +145,60 @@ ${rawText}
   } catch (error) {
     console.error("AI table formatting failed, returning raw text:", error);
     return rawText;
+  }
+}
+
+// Format raw text to clean Markdown (for Confluence, web content, etc.)
+async function formatToMarkdown(
+  rawContent: string,
+  sourceType?: string
+): Promise<{ content: string; success: boolean; error?: string }> {
+  try {
+    const sourceHint = sourceType
+      ? `이 텍스트는 ${sourceType}에서 가져온 내용입니다.`
+      : "";
+
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 16384,
+      messages: [
+        {
+          role: "user",
+          content: `다음 텍스트를 깔끔한 마크다운 형식으로 정리해주세요.
+${sourceHint}
+
+## 중요 규칙
+1. **내용은 절대 변경하지 마세요** - 원본 내용을 그대로 유지
+2. 마크다운 스타일만 적용:
+   - 제목: # ## ### 등 적절한 레벨 사용
+   - 표: | 헤더 | 헤더 | 형식으로 변환
+   - 목록: - 또는 1. 2. 3. 사용
+   - 코드: \`인라인\` 또는 \`\`\`블록\`\`\` 사용
+   - 강조: **굵게** 또는 *기울임*
+3. 메타데이터(작성자, 날짜 등)는 문서 상단에 정리
+4. 목차가 있으면 링크 형식으로 정리
+5. 빈 줄로 섹션 구분
+
+## 입력 텍스트:
+${rawContent}
+
+## 출력:
+마크다운으로 정리된 결과만 출력하세요 (설명 없이):`,
+        },
+      ],
+    });
+
+    const textContent = response.content.find((block) => block.type === "text");
+    if (textContent) {
+      return { content: textContent.text, success: true };
+    }
+    return { content: rawContent, success: false, error: "No response from AI" };
+  } catch (error) {
+    return {
+      content: rawContent,
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
   }
 }
 
@@ -317,6 +396,40 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 success: true,
                 message: `Converted and saved to ${output_path}`,
                 preview: result.content.substring(0, 500) + "...",
+              }),
+            },
+          ],
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(result),
+          },
+        ],
+      };
+    }
+
+    case "format_markdown": {
+      const { content, output_path, source_type } = args as {
+        content: string;
+        output_path?: string;
+        source_type?: string;
+      };
+      const result = await formatToMarkdown(content, source_type);
+
+      if (result.success && output_path) {
+        fs.writeFileSync(output_path, result.content, "utf-8");
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify({
+                success: true,
+                message: `Formatted and saved to ${output_path}`,
+                preview: result.content.substring(0, 1000) + "...",
               }),
             },
           ],

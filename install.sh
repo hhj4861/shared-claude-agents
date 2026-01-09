@@ -164,6 +164,26 @@ if [ -f "$SHARED_DIR/RULES.md" ]; then
     fi
 fi
 
+# Scripts (qa-input-form 등)
+if [ -d "$SHARED_DIR/scripts" ]; then
+    if [ -L "$HOME/.claude/scripts" ]; then
+        rm "$HOME/.claude/scripts"
+    fi
+    if [ ! -d "$HOME/.claude/scripts" ]; then
+        ln -s "$SHARED_DIR/scripts" "$HOME/.claude/scripts"
+        echo -e "       ${GREEN}Linked:${NC} scripts"
+
+        # qa-input-form 의존성 설치
+        if [ "$BUILD_MCP" = true ] && [ -d "$SHARED_DIR/scripts/qa-input-form" ]; then
+            echo -e "       Installing qa-input-form dependencies..."
+            cd "$SHARED_DIR/scripts/qa-input-form"
+            npm install --silent 2>/dev/null || npm install
+            cd "$SCRIPT_DIR"
+            echo -e "       ${GREEN}✅ qa-input-form ready${NC}"
+        fi
+    fi
+fi
+
 echo -e "       ${GREEN}Done${NC}"
 
 # 5. SessionStart Hook 설정
@@ -307,6 +327,7 @@ if command -v claude &> /dev/null; then
     claude mcp remove -s user atlassian 2>/dev/null || true
     if claude mcp add -s user --transport sse atlassian https://mcp.atlassian.com/v1/sse 2>/dev/null; then
         echo -e "       ${GREEN}✅ atlassian registered (Confluence/Jira)${NC}"
+        echo -e "       ${YELLOW}📌 OAuth 인증 필요: Claude Code 재시작 후 /mcp → atlassian 선택하여 인증${NC}"
     else
         echo -e "       ${YELLOW}⚠️  atlassian registration failed${NC}"
     fi
@@ -377,7 +398,12 @@ echo "  - Override in project: .claude/agents/<name>/"
 echo ""
 echo "MCP Tools available after restart:"
 echo ""
-echo "  [Testing]"
+echo "  [QA Pipeline - E2E Testing]"
+echo "  - qa-pipeline: e2e_generate_code (시나리오→Playwright 코드 자동생성)"
+echo "  - qa-pipeline: e2e_parse_scenario, e2e_check_auth, e2e_create_report"
+echo "  - qa-pipeline: qa_load_config, qa_verify_scenario, qa_verify_documents"
+echo ""
+echo "  [Browser Automation]"
 echo "  - playwright: browser_navigate, browser_click, browser_snapshot (Web E2E)"
 echo "  - appium-mcp: appium_start_session, appium_tap, appium_screenshot (Mobile)"
 echo ""

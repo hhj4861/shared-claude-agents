@@ -340,6 +340,90 @@ P3_Low:
 
 ---
 
+## ⭐ 분석 데이터 기반 시나리오 자동 생성 (필수)
+
+**test-targets.json의 데이터를 반드시 활용하여 시나리오를 생성해야 합니다.**
+
+### 1. 검색 필터 → 검색 테스트 시나리오
+
+```yaml
+입력: test-targets.search_filters
+규칙:
+  - 각 필터 필드마다 개별 검색 시나리오 생성
+  - SELECT 필드는 각 옵션별 시나리오 생성
+  - 조합 검색 시나리오 최소 2개 생성
+  - 검색 결과 없음 시나리오 생성
+
+예시_생성:
+  search_filters:
+    - name: "type", type: "SELECT", options: ["BACK_OFFICE", "EXTERNAL_SYSTEM"]
+
+  생성할_시나리오:
+    - TC-CLIENT-E2E-010: 유형 필터 - BACK_OFFICE 검색
+    - TC-CLIENT-E2E-011: 유형 필터 - EXTERNAL_SYSTEM 검색
+    - TC-CLIENT-E2E-012: 유형 필터 - 전체 선택 (필터 초기화)
+```
+
+### 2. 폼 필드 → 폼 유효성 테스트 시나리오
+
+```yaml
+입력: test-targets.forms
+규칙:
+  - 정상 입력 시나리오 (모든 필수값 입력)
+  - 각 required 필드 누락 시나리오
+  - maxLength 초과 시나리오
+  - pattern 위반 시나리오 (URL, email 등)
+  - 에러 메시지 검증 포함
+
+예시_생성:
+  forms.ClientCreatePopup.fields:
+    - name: "name", required: true, maxLength: 100, errorMsg: "명칭을 입력해주세요"
+    - name: "url", required: true, pattern: "URL", errorMsg: "올바른 URL 형식이 아닙니다"
+
+  생성할_시나리오:
+    - TC-CLIENT-E2E-020: 클라이언트 생성 - 정상 입력
+    - TC-CLIENT-E2E-021: 클라이언트 생성 - 명칭 누락 → "명칭을 입력해주세요" 확인
+    - TC-CLIENT-E2E-022: 클라이언트 생성 - URL 누락 → "올바른 URL 형식이 아닙니다" 확인
+    - TC-CLIENT-E2E-023: 클라이언트 생성 - 명칭 100자 초과
+    - TC-CLIENT-E2E-024: 클라이언트 생성 - 잘못된 URL 형식 → "올바른 URL 형식이 아닙니다" 확인
+```
+
+### 3. 에러 메시지 → 에러 검증 시나리오
+
+```yaml
+입력: test-targets.messages
+규칙:
+  - 각 성공 메시지 검증 시나리오
+  - 각 에러 상황별 메시지 검증 시나리오
+  - 실제 메시지 텍스트를 assert에 포함
+
+예시_생성:
+  messages.success.create: ["등록에 성공하였습니다"]
+  messages.error.duplicate: "이미 존재하는 {item}입니다"
+
+  생성할_시나리오:
+    - TC-CLIENT-E2E-003 assert: "assert: .notification:has-text('등록에 성공하였습니다') visible"
+    - TC-CLIENT-E2E-030: 중복 클라이언트 생성 → "이미 존재하는 클라이언트입니다" 확인
+```
+
+### 4. 셀렉터 활용
+
+```yaml
+입력: test-targets.selectors, test-targets.forms.*.selector
+규칙:
+  - data-testid 없으면 분석된 셀렉터 사용
+  - 분석된 셀렉터 그대로 테스트 단계에 반영
+  - 추측하지 말고 분석 결과 사용
+
+잘못된_예:
+  "fill: [data-testid='name'] -> 'test'"  # data-testid 없는 프로젝트
+
+올바른_예:
+  "fill: input[name='name'] -> 'test'"    # 분석된 실제 셀렉터 사용
+```
+
+---
+
 ## 엣지 케이스 추론 가이드
 
 ### 입력값
@@ -418,6 +502,50 @@ OWASP_Top_10:
 
 ---
 
+## ⭐ 최소 시나리오 요구사항 (필수)
+
+```yaml
+각_페이지별_최소_시나리오:
+  목록_페이지:
+    정상케이스:
+      - 목록 조회 성공
+      - 페이징 이동
+    검색:
+      - 각 검색필터별 1개 이상  # search_filters 개수만큼
+      - 검색 결과 없음
+    생성:
+      - 정상 생성
+      - 필수값 누락 (필수필드 개수만큼)
+      - 유효성 실패 (pattern 있는 필드만큼)
+    삭제:
+      - 정상 삭제
+      - 삭제 확인 취소
+
+  상세_페이지:
+    정상케이스:
+      - 상세 조회 성공
+    수정:
+      - 정상 수정
+      - 필수값 누락
+
+  인증:
+    - 로그인 성공
+    - 로그인 실패 (잘못된 비밀번호)
+    - 권한 없는 페이지 접근
+
+최소_TC_개수:
+  검색필터: search_filters.length × 2  # 각 필터별 정상+실패
+  폼필드: forms.fields.length × 2       # 각 필드별 정상+유효성실패
+  CRUD: 4 × 라우트수                    # Create, Read, Update, Delete
+
+검증_기준:
+  - 각 search_filter에 대한 테스트 존재 여부
+  - 각 required 필드에 대한 유효성 테스트 존재 여부
+  - 각 에러 메시지에 대한 검증 존재 여부
+```
+
+---
+
 ## 반환 형식
 
 ```yaml
@@ -434,6 +562,10 @@ OWASP_Top_10:
     P1: 12
     P2: 8
     P3: 3
+  coverage:
+    search_filters_tested: 8/8
+    form_fields_tested: 12/12
+    error_messages_tested: 6/6
   validation:
     passed: true
     issues: []

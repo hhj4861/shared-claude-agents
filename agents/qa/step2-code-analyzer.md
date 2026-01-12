@@ -162,6 +162,33 @@ tools: Read, Write, Glob, Grep, Bash, mcp__qa-pipeline__qa_update_step, mcp__qa-
       - data-testid 속성
       - id 속성
       - class 패턴
+      - name 속성 (폼 요소)
+
+  # ⭐ 추가: E2E 테스트용 상세 분석
+  검색필터_분석:
+    패턴: "**/views/**/*.vue", "**/components/**Filter*.vue"
+    추출:
+      - 필터 필드명 (name 속성)
+      - 필드 타입 (INPUT, SELECT, DATE, CHECKBOX)
+      - SELECT 옵션값 (codes 배열)
+      - 기본값 (defaultValue)
+      - 필수 여부 (required)
+
+  폼필드_분석:
+    패턴: "**/views/**/*.vue", "**/components/**Form*.vue", "**/components/**Popup*.vue"
+    추출:
+      - 입력 필드명
+      - 필드 타입 (text, number, email, select, textarea)
+      - validation 규칙 (required, minLength, maxLength, pattern)
+      - 에러 메시지 텍스트
+      - placeholder 텍스트
+
+  에러메시지_분석:
+    패턴: "**/*.vue", "**/constants/**/*.js"
+    추출:
+      - 알림 메시지 (성공/실패/경고)
+      - 유효성 검사 에러 메시지
+      - API 에러 응답 처리 메시지
 ```
 
 ### React
@@ -259,6 +286,56 @@ Framework: {framework}
 | Name Input | [data-testid="client-name"] | ClientForm |
 | Submit Button | [data-testid="submit-btn"] | ClientForm |
 
+## ⭐ 검색 필터 (Search Filters)
+
+### {페이지명} 검색 필터
+
+| 필드명 | 셀렉터 | 타입 | 옵션/제약 | 테스트 값 |
+|--------|--------|------|----------|----------|
+| id | input[name="id"] | INPUT | - | "1", "", "abc" |
+| name | input[name="name"] | INPUT | - | "테스트", "", "!@#$%" |
+| type | select[name="type"] | SELECT | BACK_OFFICE, EXTERNAL_SYSTEM, SAML | 각 옵션별 테스트 |
+| activityYn | select[name="activityYn"] | SELECT | true(가능), false(불가능) | true, false |
+
+### 검색 테스트 시나리오 (자동 생성용)
+- 각 필터 개별 검색
+- 필터 조합 검색
+- 빈 값 검색
+- 특수문자 검색
+
+## ⭐ 폼 필드 (Form Fields)
+
+### {팝업/페이지명} 폼
+
+| 필드명 | 셀렉터 | 타입 | 필수 | Validation | 에러 메시지 |
+|--------|--------|------|------|------------|------------|
+| name | input[name="name"] | text | Yes | minLength: 1, maxLength: 100 | "명칭을 입력해주세요" |
+| url | input[name="url"] | text | Yes | pattern: URL | "올바른 URL 형식이 아닙니다" |
+| type | select[name="type"] | select | Yes | - | "유형을 선택해주세요" |
+
+### 폼 테스트 시나리오 (자동 생성용)
+- 정상 입력 → 성공
+- 필수값 누락 → 에러 메시지 확인
+- 최대 길이 초과 → 에러 메시지 확인
+- 잘못된 형식 → 에러 메시지 확인
+
+## ⭐ 에러 메시지 (Error Messages)
+
+### 성공 메시지
+| 액션 | 메시지 |
+|------|--------|
+| 생성 | "등록되었습니다", "등록에 성공하였습니다" |
+| 수정 | "수정되었습니다", "저장되었습니다" |
+| 삭제 | "삭제되었습니다" |
+
+### 실패 메시지
+| 상황 | 메시지 |
+|------|--------|
+| 필수값 누락 | "{필드명}을(를) 입력해주세요" |
+| 중복 | "이미 존재하는 {항목}입니다" |
+| 권한 없음 | "권한이 없습니다" |
+| 서버 에러 | "서버 오류가 발생했습니다" |
+
 ## API Integration
 
 | Frontend Call | Backend Endpoint | Method |
@@ -303,12 +380,47 @@ Framework: {framework}
     "selectors": {
       "client-table": "[data-testid='client-table']",
       "create-btn": "[data-testid='create-btn']"
+    },
+    "search_filters": {
+      "/backofficeClient": [
+        { "name": "id", "selector": "input[name='id']", "type": "INPUT", "test_values": ["1", "", "abc"] },
+        { "name": "name", "selector": "input[name='name']", "type": "INPUT", "test_values": ["테스트", "", "!@#"] },
+        { "name": "type", "selector": "select[name='type']", "type": "SELECT", "options": ["BACK_OFFICE", "EXTERNAL_SYSTEM", "SAML"] },
+        { "name": "activityYn", "selector": "select[name='activityYn']", "type": "SELECT", "options": [true, false] }
+      ]
+    },
+    "forms": {
+      "ClientCreatePopup": {
+        "selector": ".vs-popup-content",
+        "fields": [
+          { "name": "name", "selector": "input[name='name']", "type": "text", "required": true, "maxLength": 100, "errorMsg": "명칭을 입력해주세요" },
+          { "name": "type", "selector": "select[name='type']", "type": "select", "required": true, "options": ["BACK_OFFICE", "EXTERNAL_SYSTEM", "SAML"] },
+          { "name": "url", "selector": "input[name='url']", "type": "text", "required": true, "pattern": "URL", "errorMsg": "올바른 URL 형식이 아닙니다" }
+        ],
+        "submit": "button:has-text('등록')",
+        "successMsg": "등록에 성공하였습니다"
+      }
+    },
+    "messages": {
+      "success": {
+        "create": ["등록되었습니다", "등록에 성공하였습니다"],
+        "update": ["수정되었습니다", "저장되었습니다"],
+        "delete": ["삭제되었습니다"]
+      },
+      "error": {
+        "required": "{field}을(를) 입력해주세요",
+        "duplicate": "이미 존재하는 {item}입니다",
+        "forbidden": "권한이 없습니다",
+        "server": "서버 오류가 발생했습니다"
+      }
     }
   },
   "test_coverage": {
     "api_endpoints": 15,
     "fe_routes": 12,
-    "identified_selectors": 24
+    "identified_selectors": 24,
+    "search_filters": 8,
+    "form_fields": 12
   }
 }
 ```

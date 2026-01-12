@@ -954,6 +954,11 @@ async function verifyScenario(
   missing_sections: string[];
   tc_count: Record<string, number>;
   reference_coverage: { found: number; expected: number };
+  coverage: {
+    search_filters: { tested: number; total: number };
+    form_validations: { tested: number; total: number };
+    error_messages: { tested: number; total: number };
+  };
   issues: Array<{ type: string; file?: string; message: string }>;
 }> {
   const config: PipelineConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
@@ -990,6 +995,11 @@ async function verifyScenario(
       missing_sections: [],
       tc_count: tcCount,
       reference_coverage: { found: 0, expected: 0 },
+      coverage: {
+        search_filters: { tested: 0, total: 0 },
+        form_validations: { tested: 0, total: 0 },
+        error_messages: { tested: 0, total: 0 },
+      },
       issues: [{ type: "no_files", message: "No scenario files found" }],
     };
   }
@@ -1101,6 +1111,99 @@ async function verifyScenario(
     }
   }
 
+  // ⭐ Enhanced verification: Check search filters, form fields, and error messages
+  const basePath = config.fe_path || config.be_path;
+  const testTargetsPath = path.join(basePath, "docs", "qa", "latest", "analysis", "test-targets.json");
+
+  interface TestTargets {
+    frontend?: {
+      search_filters?: Record<string, Array<{ name: string; type: string; options?: string[] }>>;
+      forms?: Record<string, { fields: Array<{ name: string; required?: boolean; errorMsg?: string }> }>;
+      messages?: {
+        success?: Record<string, string[]>;
+        error?: Record<string, string>;
+      };
+    };
+  }
+
+  let coverageStats = {
+    search_filters: { tested: 0, total: 0 },
+    form_validations: { tested: 0, total: 0 },
+    error_messages: { tested: 0, total: 0 },
+  };
+
+  if (fs.existsSync(testTargetsPath)) {
+    try {
+      const testTargets: TestTargets = JSON.parse(fs.readFileSync(testTargetsPath, "utf-8"));
+      const allScenarioContent = scenarioFiles.map(f => fs.readFileSync(f, "utf-8")).join("\n");
+
+      // Check search filter coverage
+      if (testTargets.frontend?.search_filters) {
+        for (const [route, filters] of Object.entries(testTargets.frontend.search_filters)) {
+          for (const filter of filters) {
+            coverageStats.search_filters.total++;
+            // Check if filter name appears in scenarios
+            if (allScenarioContent.includes(filter.name) ||
+                allScenarioContent.includes(`name="${filter.name}"`) ||
+                allScenarioContent.includes(`name='${filter.name}'`)) {
+              coverageStats.search_filters.tested++;
+            }
+          }
+        }
+
+        if (coverageStats.search_filters.total > 0 &&
+            coverageStats.search_filters.tested < coverageStats.search_filters.total * 0.5) {
+          issues.push({
+            type: "low_filter_coverage",
+            message: `Search filter coverage is low: ${coverageStats.search_filters.tested}/${coverageStats.search_filters.total} filters tested`,
+          });
+        }
+      }
+
+      // Check form validation coverage
+      if (testTargets.frontend?.forms) {
+        for (const [formName, formDef] of Object.entries(testTargets.frontend.forms)) {
+          for (const field of formDef.fields || []) {
+            if (field.required) {
+              coverageStats.form_validations.total++;
+              // Check if required field validation is tested
+              if (allScenarioContent.includes(field.name) &&
+                  (allScenarioContent.includes("누락") ||
+                   allScenarioContent.includes("필수") ||
+                   allScenarioContent.includes("required") ||
+                   (field.errorMsg && allScenarioContent.includes(field.errorMsg)))) {
+                coverageStats.form_validations.tested++;
+              }
+            }
+          }
+        }
+
+        if (coverageStats.form_validations.total > 0 &&
+            coverageStats.form_validations.tested < coverageStats.form_validations.total * 0.5) {
+          issues.push({
+            type: "low_validation_coverage",
+            message: `Form validation coverage is low: ${coverageStats.form_validations.tested}/${coverageStats.form_validations.total} required fields tested`,
+          });
+        }
+      }
+
+      // Check error message coverage
+      if (testTargets.frontend?.messages?.error) {
+        for (const [errorType, errorMsg] of Object.entries(testTargets.frontend.messages.error)) {
+          coverageStats.error_messages.total++;
+          // Check if error message or error type is tested
+          const msgPattern = errorMsg.replace("{field}", "").replace("{item}", "").trim();
+          if (allScenarioContent.includes(msgPattern) ||
+              allScenarioContent.includes(errorType)) {
+            coverageStats.error_messages.tested++;
+          }
+        }
+      }
+    } catch (e) {
+      // test-targets.json parse error - skip enhanced verification
+    }
+  }
+
   const passed = issues.length === 0;
 
   // Update state
@@ -1121,6 +1224,7 @@ async function verifyScenario(
     missing_sections: [...new Set(missingSections)],
     tc_count: tcCount,
     reference_coverage: { found: foundRefDocs, expected: totalRefDocs },
+    coverage: coverageStats,
     issues,
   };
 }

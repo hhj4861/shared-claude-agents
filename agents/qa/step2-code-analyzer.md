@@ -13,14 +13,32 @@ tools: Read, Write, Glob, Grep, Bash, mcp__qa-pipeline__qa_update_step, mcp__qa-
 
 ```yaml
 담당: BE/FE 소스코드 분석
-입력: docs/qa/latest/config.json 파일 경로
+입력:
+  - docs/qa/latest/config.json (설정 파일)
+  - docs/qa/latest/analysis/project-structure.json (프로젝트 구조) ⭐
 출력: docs/qa/latest/analysis/ 에 분석 결과 파일
 제공: 시나리오 작성자에게 테스트 대상 목록 전달
 ```
 
 ---
 
-## 실행 흐름 (⚡ 병렬 분석으로 빠름)
+## ⚠️ 실행 모드 (자동 진행 필수!)
+
+```yaml
+기본_동작 (질문 없이 자동 진행):
+  - 코드 분석 실패 시 자동 건너뛰기
+  - 사용자 질의 없이 진행
+  - 실패 파일은 로그로만 기록
+
+⚠️ 중요:
+  - AskUserQuestion 사용 금지!
+  - 사용자에게 질문하지 말고 자동으로 진행
+  - 치명적 오류만 보고하고 나머지는 자동 처리
+```
+
+---
+
+## 실행 흐름
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -30,17 +48,27 @@ tools: Read, Write, Glob, Grep, Bash, mcp__qa-pipeline__qa_update_step, mcp__qa-
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│ STEP 2: 병렬 코드 분석 (⚡ MCP가 BE/FE 동시 분석)                │
-│   qa_analyze_code(config_path)                                  │
-│   → BE 엔드포인트 추출 (Kotlin/Java/Express)                    │
-│   → FE 라우트 추출 (Vue/React)                                  │
-│   → data-testid 셀렉터 추출                                     │
-│   → analysis/ 폴더에 자동 저장                                  │
+│ STEP 2: 프로젝트 구조 로드 ⭐ (필수)                              │
+│   Read: docs/qa/latest/analysis/project-structure.json          │
+│   → BE 프레임워크, 패턴 확인                                     │
+│   → FE 프레임워크, 패턴 확인                                     │
+│   → 없으면 에러: "step1.5-project-detector 먼저 실행 필요"       │
 └─────────────────────────────────────────────────────────────────┘
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│ STEP 3: 분석 결과 보강 (선택적)                                  │
+│ STEP 3: 코드 분석 (project-structure.json 기반)                 │
+│   BE 분석:                                                       │
+│     → project-structure.be.patterns 사용                        │
+│     → 프레임워크별 파싱 로직 적용                                │
+│   FE 분석:                                                       │
+│     → project-structure.fe.patterns 사용                        │
+│     → 프레임워크별 파싱 로직 적용                                │
+└─────────────────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│ STEP 4: 분석 결과 보강 (선택적)                                  │
 │   결과가 부족하면 추가 분석:                                     │
 │   - Glob/Grep로 누락된 패턴 탐색                                │
 │   - 특수한 프레임워크 처리                                       │
@@ -48,7 +76,7 @@ tools: Read, Write, Glob, Grep, Bash, mcp__qa-pipeline__qa_update_step, mcp__qa-
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│ STEP 4: 상태 업데이트                                            │
+│ STEP 5: 상태 업데이트                                            │
 │   qa_update_step(config_path, "code-analyzer", "completed",     │
 │                  result: { be_endpoints: N, fe_routes: M })     │
 └─────────────────────────────────────────────────────────────────┘
@@ -56,21 +84,100 @@ tools: Read, Write, Glob, Grep, Bash, mcp__qa-pipeline__qa_update_step, mcp__qa-
 
 ---
 
-## ⚡ 빠른 분석 (권장)
+## ⭐ project-structure.json 활용 (필수)
+
+**step1.5-project-detector가 생성한 project-structure.json을 반드시 먼저 읽어야 합니다.**
+
+### project-structure.json 구조
+
+```json
+{
+  "be": {
+    "framework": "kotlin-spring",    // 감지된 프레임워크
+    "patterns": {
+      "controller": ["**/controller/**/*.kt"],
+      "service": ["**/service/**/*.kt"]
+    }
+  },
+  "fe": {
+    "framework": "vue3",
+    "patterns": {
+      "router": ["**/router/**/*.ts"],
+      "views": ["**/views/**/*.vue"],
+      "components": ["**/components/**/*.vue"]
+    }
+  }
+}
+```
+
+### 사용 규칙
 
 ```yaml
-기존_방식 (느림):
-  - 파일 하나씩 Read → 파싱 → 다음 파일
-  - 대규모 프로젝트 = 5~10분
+1_파일_확인:
+  Read: docs/qa/latest/analysis/project-structure.json
+  없으면: 에러 반환 "step1.5-project-detector를 먼저 실행하세요"
 
-새로운_방식 (빠름):
-  - qa_analyze_code 한 번 호출
-  - MCP 내부에서 BE/FE 병렬 분석
-  - 대규모 프로젝트 = ~30초
+2_패턴_사용:
+  BE_분석:
+    patterns = project-structure.be.patterns
+    framework = project-structure.be.framework
+    Glob: patterns.controller → 컨트롤러 파일 목록
+    파싱: framework에 맞는 로직 적용
 
+  FE_분석:
+    patterns = project-structure.fe.patterns
+    framework = project-structure.fe.framework
+    Glob: patterns.views → 페이지 파일 목록
+    파싱: framework에 맞는 로직 적용
+
+3_하드코딩_금지:
+  ❌ 잘못됨: Glob("**/controller/**/*.kt")  # 하드코딩
+  ✅ 올바름: Glob(project_structure.be.patterns.controller)
+```
+
+### 프레임워크별 파싱 로직 선택
+
+```yaml
+BE_파싱_로직:
+  kotlin-spring: Spring 어노테이션 (@GetMapping 등)
+  java-spring: Spring 어노테이션
+  express: router.get/post 패턴
+  nestjs: @Controller, @Get 데코레이터
+  fastapi: @app.get, @router.post 패턴
+  django: urlpatterns, views 함수
+  go-gin: r.GET, r.POST 패턴
+  laravel: Route::get, Route::post 패턴
+
+FE_파싱_로직:
+  vue3: <script setup>, defineProps, vue-router
+  vue2: export default, Vue.component
+  react: function Component, React.FC, react-router
+  angular: @Component, RouterModule
+  nextjs: pages/ 디렉토리 기반 라우팅
+  nuxt: pages/ 디렉토리 기반 라우팅
+```
+
+---
+
+## 분석 방식
+
+### MCP 도구 사용 (권장)
+
+```yaml
 사용법:
   qa_analyze_code(config_path)
-  → be-analysis.md, fe-analysis.md, test-targets.json 자동 생성
+  → project-structure.json 자동 로드
+  → 패턴 기반 파일 탐색
+  → be-analysis.md, fe-analysis.md, test-targets.json 생성
+```
+
+### 수동 분석 (MCP 실패 시)
+
+```yaml
+1. project-structure.json 읽기
+2. 패턴으로 Glob 실행
+3. 프레임워크에 맞는 Grep/파싱
+4. 결과 파일 생성
 ```
 
 ---
@@ -189,6 +296,249 @@ tools: Read, Write, Glob, Grep, Bash, mcp__qa-pipeline__qa_update_step, mcp__qa-
       - 알림 메시지 (성공/실패/경고)
       - 유효성 검사 에러 메시지
       - API 에러 응답 처리 메시지
+
+  ################################################################################
+  # ⭐⭐⭐ 상세 UI 컴포넌트 분석 (E2E 테스트용 - CRITICAL)
+  ################################################################################
+
+  체크박스_분석:
+    패턴: "**/*.vue"
+    추출:
+      - v-model 바인딩 변수명
+      - 체크박스 label 텍스트
+      - @change 핸들러 (연동 동작)
+      - 초기값 (defaultChecked)
+      - 연동 필드 (watch로 연결된 다른 필드)
+    검색_패턴:
+      - 'type="checkbox"'
+      - 'vs-checkbox'
+      - ':checked'
+      - 'v-model=".*Yn"'  # ~Yn 형태의 boolean 필드
+    예시_출력:
+      - { name: "displayYn", label: "표시", default: true, linkedFields: ["sidebarVisible"], onChange: "updateVisibility" }
+
+  라디오버튼_분석:
+    패턴: "**/*.vue"
+    추출:
+      - v-model 바인딩 변수명
+      - 라디오 그룹 옵션들 (value, label)
+      - @change 핸들러
+      - 선택값에 따른 조건부 렌더링 (v-if/v-show)
+    검색_패턴:
+      - 'type="radio"'
+      - 'vs-radio'
+      - 'v-model=".*Type"'  # ~Type 형태의 선택 필드
+    예시_출력:
+      - { name: "menuType", options: [{value: "GROUP", label: "그룹"}, {value: "ITEM", label: "아이템"}], linkedFields: { "ITEM": ["urlField"] } }
+
+  토글스위치_분석:
+    패턴: "**/*.vue"
+    추출:
+      - v-model 바인딩 변수명
+      - 토글 label 텍스트
+      - @change 핸들러 (즉시 API 호출 여부)
+      - 확인 다이얼로그 필요 여부
+    검색_패턴:
+      - 'vs-switch'
+      - 'vs-toggle'
+      - 'el-switch'
+      - '@change.*confirm'  # 확인 다이얼로그 패턴
+    예시_출력:
+      - { name: "activityYn", label: "활성화", autoSave: true, confirmOnDisable: true, confirmMsg: "비활성화 하시겠습니까?" }
+
+  드롭다운_셀렉트_분석:
+    패턴: "**/*.vue"
+    추출:
+      - v-model 바인딩 변수명
+      - 옵션 소스 (정적 배열 vs API 호출)
+      - @change 핸들러 (연동 동작)
+      - 검색 가능 여부 (searchable)
+      - 다중 선택 여부 (multiple)
+      - placeholder 텍스트
+    검색_패턴:
+      - '<select'
+      - 'vs-select'
+      - 'el-select'
+      - ':options'
+      - 'v-for.*option'
+    예시_출력:
+      - { name: "clientId", optionSource: "api:/api/clients", searchable: true, placeholder: "클라이언트 선택", linkedFields: ["menuList"] }
+
+  입력필드_validation_분석:
+    패턴: "**/*.vue", "**/mixins/**/*.js"
+    추출:
+      - v-model 바인딩 변수명
+      - validation 규칙들:
+        - required (필수 여부)
+        - minLength, maxLength (길이 제한)
+        - pattern (정규식 - URL, email, 한글불가 등)
+        - min, max (숫자 범위)
+        - custom validator 함수
+      - 에러 메시지 텍스트
+      - 실시간 검증 vs 제출시 검증
+    검색_패턴:
+      - 'rules.*required'
+      - 'pattern.*'
+      - 'maxLength'
+      - 'validator.*function'
+      - '@blur.*validate'
+      - '/[가-힣]/.test'  # 한글 검증 패턴
+      - '/^https?:\\/\\//'  # URL 패턴
+    예시_출력:
+      - { name: "url", type: "text", validation: { required: true, pattern: "URL", noKorean: true, startWith: "/" }, errorMsgs: { required: "URL을 입력해주세요", pattern: "올바른 URL 형식이 아닙니다", noKorean: "URL에 한글을 포함할 수 없습니다" } }
+
+  테이블_리스트_분석:
+    패턴: "**/*.vue"
+    추출:
+      - 테이블 셀렉터
+      - 컬럼 정의 (label, field, sortable)
+      - 정렬 기능 여부
+      - 페이징 컴포넌트 유무
+      - 빈 데이터 메시지
+      - 행 클릭 이벤트 (@row-click)
+      - 행 호버 액션 버튼
+    검색_패턴:
+      - 'vs-table'
+      - 'vs-tr'
+      - 'vs-th'
+      - ':columns'
+      - '@row-click'
+      - 'vs-pagination'
+      - 'empty.*데이터'
+    예시_출력:
+      - { selector: ".vs-table", columns: [{label: "ID", field: "id", sortable: true}, {label: "명칭", field: "name", sortable: true}], pagination: true, emptyMsg: "데이터가 없습니다", rowClickAction: "openDetail" }
+
+  모달_팝업_분석:
+    패턴: "**/*.vue"
+    추출:
+      - 팝업 컴포넌트 셀렉터
+      - 팝업 열기 조건 (v-model, v-if)
+      - 닫기 방법 (X 버튼, 백드롭, ESC)
+      - 팝업 내 폼 필드
+      - 제출 버튼 셀렉터
+    검색_패턴:
+      - 'vs-popup'
+      - 'vs-dialog'
+      - 'vs-modal'
+      - '@close'
+      - 'close-on-backdrop'
+      - 'close-on-esc'
+    예시_출력:
+      - { selector: ".vs-popup-content", closeOnBackdrop: false, closeOnEsc: true, hasForm: true, submitBtn: "button:has-text('저장')" }
+
+  로딩_상태_분석:
+    패턴: "**/*.vue"
+    추출:
+      - 로딩 변수명 (isLoading, loading 등)
+      - 로딩 컴포넌트 유형 (스피너, 스켈레톤, 오버레이)
+      - 로딩 적용 범위 (전체 페이지, 특정 영역, 버튼)
+    검색_패턴:
+      - 'isLoading'
+      - 'loading'
+      - 'vs-loading'
+      - 'skeleton'
+      - 'spinner'
+    예시_출력:
+      - { variable: "isLoading", type: "spinner", scope: "table", showDuring: ["fetchList", "search"] }
+
+  알림_토스트_분석:
+    패턴: "**/*.vue", "**/utils/**/*.js"
+    추출:
+      - 알림 호출 방식 ($vs.notify, this.$toast 등)
+      - 알림 유형별 스타일 (success, error, warning, info)
+      - 자동 닫힘 시간
+      - 위치
+    검색_패턴:
+      - '$vs.notify'
+      - '$toast'
+      - '$message'
+      - 'notification'
+      - 'success.*color'
+      - 'danger.*color'
+    예시_출력:
+      - { method: "$vs.notify", types: { success: "green", error: "danger" }, autoClose: 3000, position: "top-right" }
+
+  ################################################################################
+  # ⭐⭐⭐ E2E 디테일 분석 - 사용자 플로우 및 데이터 의존성 (NEW)
+  ################################################################################
+
+  사용자_플로우_분석:
+    패턴: "**/router/**/*.js", "**/views/**/*.vue", "**/pages/**/*.vue"
+    추출:
+      - 페이지 간 이동 패턴 (router.push, <router-link>)
+      - 모달 열기/닫기 흐름
+      - CRUD 작업 후 이동 경로
+      - 사이드바/네비게이션 메뉴 구조
+    검색_패턴:
+      - 'router.push'
+      - '<router-link'
+      - 'this.$router'
+      - '@click.*openModal'
+      - 'handleSuccess.*push'  # 성공 후 페이지 이동
+      - 'afterSave.*navigate'
+    예시_출력:
+      user_journeys:
+        - name: "등록 플로우"
+          steps: [
+            { page: "/list", action: "등록 버튼 클릭", next: "modal:CreatePopup" },
+            { page: "modal:CreatePopup", action: "저장", next: "/list" },
+            { page: "/list", action: "신규 항목 확인", next: null }
+          ]
+
+  데이터_의존성_분석:
+    패턴: "**/*.vue", "**/api/**/*.js", "**/types/**/*.ts"
+    추출:
+      - 엔티티 간 참조 관계 (FK, clientId 등)
+      - API 호출 시 필수 파라미터
+      - 드롭다운 옵션 데이터 소스
+      - 계층적 데이터 구조 (부모-자식)
+    검색_패턴:
+      - 'clientId'
+      - 'parentId'
+      - 'depends.*on'
+      - '${.*Id}'  # 동적 ID 참조
+      - 'watch.*Id.*fetch'  # ID 변경 시 데이터 로드
+    분석_방법:
+      1. API 엔드포인트에서 필수 파라미터 추출
+      2. 폼 필드의 FK 관계 추출
+      3. 드롭다운 데이터 소스 추출
+      4. 삭제 API의 cascade 설정 확인
+    예시_출력:
+      data_dependencies:
+        entities:
+          Client:
+            required_for: ["Menu", "Resource", "Role"]
+            test_data: { name: "[E2E] Test Client", type: "BACK_OFFICE" }
+          Menu:
+            depends_on: ["Client"]
+            test_data: { name: "[E2E] Test Menu", clientId: "${Client.id}" }
+        setup_order: ["Client", "Menu", "Resource"]
+        teardown_order: ["Resource", "Menu", "Client"]
+
+  확인_다이얼로그_분석:
+    패턴: "**/*.vue"
+    추출:
+      - 확인 다이얼로그 트리거 (삭제, 비활성화 등)
+      - 다이얼로그 메시지
+      - 확인/취소 버튼 텍스트
+      - ESC/배경 클릭 동작
+    검색_패턴:
+      - 'confirm'
+      - 'vs-dialog'
+      - '$vs.dialog'
+      - 'showConfirm'
+      - '확인.*취소'
+      - '삭제하시겠습니까'
+      - '저장하지 않고'
+    예시_출력:
+      confirmation_dialogs:
+        - trigger: "삭제 버튼 클릭"
+          page: "/list"
+          selector: ".vs-dialog-confirm"
+          message: "삭제하시겠습니까?"
+          confirmBtn: "확인"
+          cancelBtn: "취소"
+          testScenarios: ["확인 → 삭제", "취소 → 유지", "ESC → 유지"]
 ```
 
 ### React
@@ -413,6 +763,179 @@ Framework: {framework}
         "forbidden": "권한이 없습니다",
         "server": "서버 오류가 발생했습니다"
       }
+    },
+    "ui_components": {
+      "checkboxes": [
+        {
+          "page": "/adminMenu",
+          "name": "displayYn",
+          "label": "표시",
+          "selector": "input[type='checkbox'][name='displayYn']",
+          "default": true,
+          "linkedFields": ["sidebarVisible"],
+          "onChange": "updateVisibility",
+          "testScenarios": [
+            "클릭 시 상태 토글",
+            "해제 시 연동 필드 비활성화",
+            "저장 시 API 요청값 검증"
+          ]
+        }
+      ],
+      "radioButtons": [
+        {
+          "page": "/adminMenu",
+          "name": "menuType",
+          "label": "메뉴 타입",
+          "selector": "input[type='radio'][name='menuType']",
+          "options": [
+            { "value": "GROUP", "label": "그룹" },
+            { "value": "ITEM", "label": "아이템" }
+          ],
+          "linkedFields": {
+            "GROUP": { "hide": ["urlField"] },
+            "ITEM": { "show": ["urlField"], "required": ["urlField"] }
+          },
+          "testScenarios": [
+            "GROUP 선택 시 URL 필드 숨김",
+            "ITEM 선택 시 URL 필드 표시 및 필수",
+            "타입 전환 시 URL 값 초기화"
+          ]
+        }
+      ],
+      "toggleSwitches": [
+        {
+          "page": "/backofficeClient",
+          "name": "activityYn",
+          "label": "접속 가능",
+          "selector": ".vs-switch[name='activityYn']",
+          "autoSave": true,
+          "confirmOnDisable": true,
+          "confirmMsg": "접속을 차단하시겠습니까?",
+          "testScenarios": [
+            "활성화 클릭 시 즉시 API 호출",
+            "비활성화 시 확인 다이얼로그",
+            "확인 후 상태 변경",
+            "취소 시 기존 상태 유지"
+          ]
+        }
+      ],
+      "dropdowns": [
+        {
+          "page": "/adminMenu",
+          "name": "clientId",
+          "label": "클라이언트",
+          "selector": "select[name='clientId']",
+          "optionSource": "api:/api/clients",
+          "searchable": true,
+          "placeholder": "클라이언트 선택",
+          "linkedFields": ["menuList"],
+          "testScenarios": [
+            "페이지 로드 시 옵션 API 호출",
+            "선택 시 연동 데이터 갱신",
+            "검색어 입력 시 필터링"
+          ]
+        }
+      ],
+      "inputValidations": [
+        {
+          "page": "/backofficeClient",
+          "form": "ClientCreatePopup",
+          "name": "url",
+          "type": "text",
+          "selector": "input[name='url']",
+          "validation": {
+            "required": true,
+            "pattern": "^https?://",
+            "noKorean": true,
+            "startWith": "/"
+          },
+          "errorMsgs": {
+            "required": "URL을 입력해주세요",
+            "pattern": "올바른 URL 형식이 아닙니다",
+            "noKorean": "URL에 한글을 포함할 수 없습니다",
+            "startWith": "URL은 /로 시작해야 합니다"
+          },
+          "testScenarios": [
+            "정상 URL 입력 - 유효성 통과",
+            "프로토콜 없는 URL - 에러",
+            "한글 포함 URL - 에러",
+            "/로 시작하지 않는 경로 - 에러",
+            "입력 후 에러 해제 확인"
+          ]
+        }
+      ],
+      "tables": [
+        {
+          "page": "/backofficeClient",
+          "name": "clientTable",
+          "selector": ".vs-table",
+          "columns": [
+            { "label": "ID", "field": "id", "sortable": true },
+            { "label": "백오피스 명칭", "field": "name", "sortable": true, "clickable": true },
+            { "label": "유형", "field": "type", "sortable": false },
+            { "label": "접속 가능여부", "field": "activityYn", "sortable": false }
+          ],
+          "pagination": true,
+          "emptyMsg": "데이터가 없습니다",
+          "rowClickAction": "navigateToDetail",
+          "testScenarios": [
+            "컬럼 헤더 표시 확인",
+            "데이터 로드 및 표시",
+            "빈 데이터 메시지 표시",
+            "정렬 기능 동작",
+            "페이징 동작",
+            "행 클릭 시 상세 이동"
+          ]
+        }
+      ],
+      "modals": [
+        {
+          "page": "/backofficeClient",
+          "name": "ClientCreatePopup",
+          "selector": ".vs-popup-content",
+          "openTrigger": "button:has-text('등록')",
+          "closeOnBackdrop": false,
+          "closeOnEsc": true,
+          "confirmOnDirtyClose": true,
+          "confirmMsg": "변경사항이 있습니다. 닫으시겠습니까?",
+          "testScenarios": [
+            "열기 버튼 클릭 시 팝업 표시",
+            "X 버튼 클릭 시 닫힘",
+            "ESC 키 동작",
+            "변경 후 닫기 시 확인 다이얼로그"
+          ]
+        }
+      ],
+      "loadingStates": [
+        {
+          "page": "/backofficeClient",
+          "variable": "isLoading",
+          "type": "spinner",
+          "scope": "table",
+          "showDuring": ["fetchList", "search"],
+          "testScenarios": [
+            "데이터 로딩 중 스피너 표시",
+            "로드 완료 후 스피너 해제"
+          ]
+        }
+      ],
+      "toasts": [
+        {
+          "page": "global",
+          "method": "$vs.notify",
+          "types": {
+            "success": { "color": "success", "icon": "check" },
+            "error": { "color": "danger", "icon": "error" }
+          },
+          "autoClose": 3000,
+          "position": "top-right",
+          "testScenarios": [
+            "성공 알림 스타일 및 메시지",
+            "에러 알림 스타일 및 메시지",
+            "자동 닫힘 시간 확인"
+          ]
+        }
+      ]
     }
   },
   "test_coverage": {
@@ -420,8 +943,105 @@ Framework: {framework}
     "fe_routes": 12,
     "identified_selectors": 24,
     "search_filters": 8,
-    "form_fields": 12
-  }
+    "form_fields": 12,
+    "ui_components": {
+      "checkboxes": 5,
+      "radioButtons": 3,
+      "toggleSwitches": 4,
+      "dropdowns": 8,
+      "inputValidations": 12,
+      "tables": 6,
+      "modals": 10,
+      "loadingStates": 6,
+      "toasts": 2
+    }
+  },
+  "user_journeys": [
+    {
+      "name": "클라이언트 등록 플로우",
+      "priority": "P0",
+      "steps": [
+        { "page": "/login", "action": "로그인", "next": "/backofficeClient" },
+        { "page": "/backofficeClient", "action": "등록 버튼 클릭", "next": "modal:ClientCreatePopup" },
+        { "page": "modal:ClientCreatePopup", "action": "폼 입력 및 저장", "next": "/backofficeClient" },
+        { "page": "/backofficeClient", "action": "테이블에서 신규 항목 확인", "next": null }
+      ],
+      "testScenarios": [
+        "전체 플로우 연속 실행",
+        "각 단계별 상태 검증",
+        "중간 이탈 후 재진입"
+      ]
+    },
+    {
+      "name": "클라이언트 상세 수정 플로우",
+      "priority": "P1",
+      "steps": [
+        { "page": "/backofficeClient", "action": "행 클릭", "next": "/backofficeClient/[id]" },
+        { "page": "/backofficeClient/[id]", "action": "필드 수정", "next": null },
+        { "page": "/backofficeClient/[id]", "action": "저장", "next": null },
+        { "page": "/backofficeClient/[id]", "action": "목록으로 돌아가기", "next": "/backofficeClient" },
+        { "page": "/backofficeClient", "action": "변경사항 반영 확인", "next": null }
+      ],
+      "testScenarios": [
+        "수정 후 목록 갱신 확인",
+        "취소 시 변경사항 미반영"
+      ]
+    }
+  ],
+  "data_dependencies": {
+    "entities": {
+      "Client": {
+        "required_for": ["Role", "Menu", "Resource"],
+        "api": "/api/v1/clients",
+        "test_data": { "name": "[E2E] Test Client", "type": "BACK_OFFICE" }
+      },
+      "Menu": {
+        "depends_on": ["Client"],
+        "api": "/api/v1/menus",
+        "test_data": { "name": "[E2E] Test Menu", "clientId": "${Client.id}" }
+      },
+      "Resource": {
+        "depends_on": ["Client"],
+        "api": "/api/v1/resources",
+        "test_data": { "name": "[E2E] Test Resource", "clientId": "${Client.id}" }
+      }
+    },
+    "setup_order": ["Client", "Role", "Resource", "Menu"],
+    "teardown_order": ["Menu", "Resource", "Role", "Client"],
+    "testScenarios": [
+      "의존 데이터 없이 생성 시도 → 에러",
+      "의존 데이터 삭제 시 연쇄 동작 확인",
+      "참조 중인 데이터 삭제 시 경고"
+    ]
+  },
+  "confirmation_dialogs": [
+    {
+      "trigger": "삭제 버튼 클릭",
+      "page": "/backofficeClient",
+      "selector": ".vs-dialog-confirm",
+      "message": "삭제하시겠습니까?",
+      "confirmBtn": "확인",
+      "cancelBtn": "취소",
+      "testScenarios": [
+        "확인 클릭 → 삭제 실행",
+        "취소 클릭 → 삭제 취소",
+        "ESC 키 → 취소와 동일",
+        "배경 클릭 → 취소와 동일"
+      ]
+    },
+    {
+      "trigger": "페이지 이탈 (변경사항 있음)",
+      "page": "global",
+      "selector": ".vs-dialog-confirm",
+      "message": "변경사항이 있습니다. 저장하지 않고 나가시겠습니까?",
+      "confirmBtn": "나가기",
+      "cancelBtn": "취소",
+      "testScenarios": [
+        "확인 → 변경사항 버리고 이동",
+        "취소 → 현재 페이지 유지"
+      ]
+    }
+  ]
 }
 ```
 

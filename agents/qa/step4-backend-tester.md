@@ -41,7 +41,7 @@ DO_NOT:
 ├─────────────────────────────────────────────────────────────────┤
 │ Step 3: 테스트 코드 생성                                        │
 │   시나리오의 각 TC를 테스트 코드로 변환                         │
-│   → tests/api/{feature}.spec.ts                                 │
+│   → docs/qa/latest/docs/qa/latest/tests/api/{feature}.spec.ts                  │
 ├─────────────────────────────────────────────────────────────────┤
 │ Step 4: 테스트 실행                                             │
 │   npm test 또는 프로젝트 테스트 명령 실행                       │
@@ -122,7 +122,7 @@ ls {프로젝트}/docs/qa/latest/scenarios/*-api.md
 ### 생성 코드 예시
 
 ```typescript
-// tests/api/auth.spec.ts
+// docs/qa/latest/tests/api/auth.spec.ts
 import request from 'supertest';
 
 const BASE_URL = process.env.API_BASE_URL || 'https://api-dev.example.com';
@@ -147,6 +147,58 @@ describe('인증 API', () => {
       accessToken = response.body.accessToken;
     });
   });
+
+// ⭐ 다건 생성 테스트 예시
+describe('클라이언트 CRUD API', () => {
+  const createdIds: string[] = [];
+  const TEST_PREFIX = '[TEST]';
+
+  // TC-CLIENT-API-003: 다건 생성 (최소 3건)
+  describe('TC-CLIENT-API-003: 클라이언트 다건 생성', () => {
+    const testClients = [
+      { name: `${TEST_PREFIX} 클라이언트1`, type: 'BACK_OFFICE' },
+      { name: `${TEST_PREFIX} 클라이언트2`, type: 'EXTERNAL_SYSTEM' },
+      { name: `${TEST_PREFIX} 클라이언트3`, type: 'BACK_OFFICE' },
+    ];
+
+    testClients.forEach((client, index) => {
+      it(`${index + 1}번째 클라이언트 생성`, async () => {
+        const response = await request(BASE_URL)
+          .post('/api/v1/clients')
+          .set('Authorization', `Bearer ${accessToken}`)
+          .send(client);
+
+        expect(response.status).toBe(201);
+        expect(response.body).toHaveProperty('id');
+        expect(response.body.name).toBe(client.name);
+
+        createdIds.push(response.body.id);
+      });
+    });
+
+    it('생성한 3건 목록 조회 확인', async () => {
+      const response = await request(BASE_URL)
+        .get('/api/v1/clients')
+        .query({ search: TEST_PREFIX })
+        .set('Authorization', `Bearer ${accessToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.items.length).toBeGreaterThanOrEqual(3);
+    });
+  });
+
+  // TC-CLIENT-API-050: 일괄 삭제 (생성한 데이터만)
+  describe('TC-CLIENT-API-050: 일괄 삭제', () => {
+    it('생성한 클라이언트만 일괄 삭제', async () => {
+      const response = await request(BASE_URL)
+        .delete('/api/v1/clients/bulk')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ ids: createdIds });
+
+      expect(response.status).toBe(200);
+    });
+  });
+});
 
   // TC-AUTH-API-002: 잘못된 비밀번호
   describe('TC-AUTH-API-002: 잘못된 비밀번호', () => {
@@ -190,7 +242,7 @@ describe('인증 API', () => {
 ### 테스트 파일 저장 위치
 
 ```
-{be_path}/tests/api/
+{be_path}/docs/qa/latest/tests/api/
 ├── auth.spec.ts
 ├── users.spec.ts
 └── {feature}.spec.ts
@@ -205,7 +257,7 @@ describe('인증 API', () => {
 npm test
 
 # 특정 파일만
-npm test -- tests/api/auth.spec.ts
+npm test -- docs/qa/latest/tests/api/auth.spec.ts
 
 # Gradle (Java/Kotlin)
 ./gradlew test
@@ -259,8 +311,8 @@ API_BASE_URL={test_server.be_url}
 
 ## 생성된 테스트 코드
 
-- `tests/api/auth.spec.ts`
-- `tests/api/users.spec.ts`
+- `docs/qa/latest/tests/api/auth.spec.ts`
+- `docs/qa/latest/tests/api/users.spec.ts`
 ```
 
 ---
@@ -306,4 +358,83 @@ const token = config.auth.token;
 
 ---
 
-**Remember**: 시나리오를 코드로 변환하고 실행한다.
+## 데이터 안전 규칙 (필수 준수)
+
+```yaml
+삭제_API_테스트_원칙:
+  일괄_삭제:
+    규칙: "테스트 중 신규 생성한 데이터만 삭제"
+    금지: "기존 데이터 삭제 API 호출"
+    이유: "운영/개발 환경 데이터 보호"
+
+  구현_방법:
+    1. 테스트 데이터 생성 후 ID 저장
+    2. 삭제 테스트는 저장된 ID만 사용
+    3. beforeAll/afterAll에서 테스트 데이터 관리
+
+  코드_예시:
+    ```typescript
+    describe('삭제 API 테스트', () => {
+      const createdIds: string[] = [];
+
+      beforeAll(async () => {
+        // 테스트용 데이터 생성
+        const response = await request(BASE_URL)
+          .post('/api/v1/items')
+          .set('Authorization', `Bearer ${token}`)
+          .send({ name: '[TEST] 삭제 테스트용 항목' });
+
+        createdIds.push(response.body.id);
+      });
+
+      // TC-ITEM-API-010: 정상 삭제
+      it('신규 생성 항목 삭제', async () => {
+        const testId = createdIds[0];  // 생성한 ID만 사용
+
+        const response = await request(BASE_URL)
+          .delete(`/api/v1/items/${testId}`)
+          .set('Authorization', `Bearer ${token}`);
+
+        expect(response.status).toBe(200);
+      });
+
+      // TC-ITEM-API-011: 일괄 삭제
+      it('신규 생성 항목들 일괄 삭제', async () => {
+        // 추가 테스트 데이터 생성
+        for (let i = 0; i < 3; i++) {
+          const res = await request(BASE_URL)
+            .post('/api/v1/items')
+            .send({ name: `[TEST] 일괄 삭제 테스트 ${i}` });
+          createdIds.push(res.body.id);
+        }
+
+        // 생성한 ID들만 삭제
+        const response = await request(BASE_URL)
+          .delete('/api/v1/items/bulk')
+          .send({ ids: createdIds.slice(1) });  // 생성한 항목만
+
+        expect(response.status).toBe(200);
+      });
+
+      afterAll(async () => {
+        // 남은 테스트 데이터 정리
+        for (const id of createdIds) {
+          await request(BASE_URL)
+            .delete(`/api/v1/items/${id}`)
+            .catch(() => {});  // 이미 삭제됐으면 무시
+        }
+      });
+    });
+    ```
+
+테스트_데이터_명명규칙:
+  prefix:
+    - "[TEST]"
+    - "[API-TEST]"
+    - "QA_"
+  timestamp: "YYYYMMDD_HHmmss"
+```
+
+---
+
+**Remember**: 시나리오를 코드로 변환하고 실행한다. **삭제 테스트는 신규 생성 데이터만 대상**으로 한다.

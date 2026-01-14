@@ -25,6 +25,8 @@ interface PipelineConfig {
   test_server?: {
     fe_url?: string;
     be_url?: string;
+    slow_mo?: number;  // E2E 테스트 속도 (ms). 기본값 0
+    headless?: boolean;  // 헤드리스 모드. 기본값 false
   };
   auth?: {
     type: string;
@@ -156,7 +158,7 @@ const tools: Tool[] = [
         },
         step_name: {
           type: "string",
-          description: "Step name: doc-collector, code-analyzer, scenario-writer",
+          description: "Step name: doc-collector, project-detector, code-analyzer, scenario-writer",
         },
         status: {
           type: "string",
@@ -502,6 +504,10 @@ const tools: Tool[] = [
           type: "string",
           description: "Path to scenario config for auth settings",
         },
+        dashboard_url: {
+          type: "string",
+          description: "Optional: Dashboard URL for real-time progress (e.g., http://localhost:3847)",
+        },
       },
       required: ["scenario_path", "output_dir"],
     },
@@ -816,6 +822,7 @@ async function loadConfig(configPath: string): Promise<{
         started_at: new Date().toISOString(),
         steps: {
           "doc-collector": { status: "pending" },
+          "project-detector": { status: "pending" },
           "code-analyzer": { status: "pending" },
           "scenario-writer": { status: "pending" },
         },
@@ -1066,7 +1073,7 @@ async function verifyScenario(
       issues.push({
         type: "no_tc_ids",
         file: filePath,
-        message: "No test case IDs found (expected format: TC-XXX-NNN)",
+        message: "No test case IDs found (expected format: TC-XXX-NNN or TC-XXX-XXX-NNN)",
       });
     }
 
@@ -2231,9 +2238,110 @@ type: ${docType}
           file: string;
         }
 
+        // UI Component interfaces
+        interface UICheckbox {
+          page: string;
+          name: string;
+          label: string;
+          selector: string;
+          vModel: string;
+          linkedFields?: string[];
+          testScenarios: string[];
+        }
+
+        interface UIRadioButton {
+          page: string;
+          name: string;
+          label: string;
+          selector: string;
+          options: { value: string; label: string }[];
+          linkedFields?: Record<string, { show?: string[]; hide?: string[] }>;
+          testScenarios: string[];
+        }
+
+        interface UIToggle {
+          page: string;
+          name: string;
+          label: string;
+          selector: string;
+          autoSave?: boolean;
+          confirmOnDisable?: boolean;
+          testScenarios: string[];
+        }
+
+        interface UIDropdown {
+          page: string;
+          name: string;
+          label: string;
+          selector: string;
+          options?: string[];
+          optionSource?: string;
+          searchable?: boolean;
+          multiple?: boolean;
+          testScenarios: string[];
+        }
+
+        interface UIInputValidation {
+          page: string;
+          form: string;
+          name: string;
+          selector: string;
+          validation: {
+            required?: boolean;
+            pattern?: string;
+            minLength?: number;
+            maxLength?: number;
+            noKorean?: boolean;
+            startsWith?: string;
+          };
+          errorMsgs: Record<string, string>;
+          testScenarios: string[];
+        }
+
+        interface UITable {
+          page: string;
+          name: string;
+          selector: string;
+          columns: { label: string; field: string; sortable?: boolean }[];
+          pagination?: boolean;
+          emptyMsg?: string;
+          rowClickAction?: string;
+          testScenarios: string[];
+        }
+
+        interface UIModal {
+          page: string;
+          name: string;
+          selector: string;
+          openTrigger?: string;
+          closeOnBackdrop?: boolean;
+          closeOnEsc?: boolean;
+          hasForm?: boolean;
+          testScenarios: string[];
+        }
+
+        interface UIComponents {
+          checkboxes: UICheckbox[];
+          radioButtons: UIRadioButton[];
+          toggles: UIToggle[];
+          dropdowns: UIDropdown[];
+          inputValidations: UIInputValidation[];
+          tables: UITable[];
+          modals: UIModal[];
+        }
+
         const endpoints: Endpoint[] = [];
         const routes: Route[] = [];
         const selectors: Selector[] = [];
+        const uiComponents: UIComponents = {
+          checkboxes: [],
+          radioButtons: [],
+          toggles: [],
+          dropdowns: [],
+          inputValidations: [],
+          tables: [],
+          modals: []
+        };
 
         // Helper to find files matching patterns
         async function findFiles(basePath: string, patterns: string[]): Promise<string[]> {
@@ -2350,6 +2458,321 @@ type: ${docType}
                   file: file.replace(config.fe_path! + "/", "")
                 });
               }
+
+              // ========================================
+              // UI Component Analysis (Vue.js specific)
+              // ========================================
+              const fileName = path.basename(file, ".vue");
+              const pagePath = file.includes("/views/") ? "/" + fileName.replace(/([A-Z])/g, (m) => m.toLowerCase()).replace(/^-/, "") : "";
+
+              // 1. Checkbox Analysis
+              // Patterns: type="checkbox", vs-checkbox, v-model="...Yn"
+              const checkboxPatterns = [
+                /v-model=["'](\w*Yn)["'][^>]*(?:type=["']checkbox["']|<vs-checkbox)/gi,
+                /type=["']checkbox["'][^>]*v-model=["'](\w+)["']/gi,
+                /<vs-checkbox[^>]*v-model=["'](\w+)["']/gi
+              ];
+
+              for (const pattern of checkboxPatterns) {
+                while ((match = pattern.exec(content)) !== null) {
+                  const vModelName = match[1];
+                  // Find associated label
+                  const labelMatch = content.match(new RegExp(`["']${vModelName}["'][^>]*>([^<]+)<|>([^<]+)<[^>]*v-model=["']${vModelName}["']`, "i"));
+                  const label = labelMatch ? (labelMatch[1] || labelMatch[2] || vModelName).trim() : vModelName;
+
+                  // Check for linked fields (watch or computed)
+                  const linkedFields: string[] = [];
+                  const watchMatch = content.match(new RegExp(`watch[^}]*${vModelName}[^}]*\\{([^}]+)\\}`, "s"));
+                  if (watchMatch) {
+                    const watchedVars = watchMatch[1].match(/this\.(\w+)/g);
+                    if (watchedVars) linkedFields.push(...watchedVars.map(v => v.replace("this.", "")));
+                  }
+
+                  if (!uiComponents.checkboxes.find(c => c.name === vModelName && c.page === pagePath)) {
+                    uiComponents.checkboxes.push({
+                      page: pagePath || fileName,
+                      name: vModelName,
+                      label: label,
+                      selector: `input[type="checkbox"][v-model*="${vModelName}"], .vs-checkbox`,
+                      vModel: vModelName,
+                      linkedFields: linkedFields.length > 0 ? linkedFields : undefined,
+                      testScenarios: [
+                        "체크박스 클릭 시 상태 토글",
+                        "체크 상태로 저장 후 API 요청값 확인",
+                        linkedFields.length > 0 ? "체크 해제 시 연동 필드 변화 확인" : ""
+                      ].filter(Boolean)
+                    });
+                  }
+                }
+              }
+
+              // 2. Radio Button Analysis
+              // Patterns: type="radio", vs-radio, v-model="...Type"
+              const radioPattern = /type=["']radio["'][^>]*v-model=["'](\w+)["'][^>]*value=["'](\w+)["']/gi;
+              const radioGroups: Record<string, { values: string[]; labels: string[] }> = {};
+
+              while ((match = radioPattern.exec(content)) !== null) {
+                const vModelName = match[1];
+                const value = match[2];
+                if (!radioGroups[vModelName]) {
+                  radioGroups[vModelName] = { values: [], labels: [] };
+                }
+                if (!radioGroups[vModelName].values.includes(value)) {
+                  radioGroups[vModelName].values.push(value);
+                  // Try to find label
+                  const labelMatch = content.match(new RegExp(`value=["']${value}["'][^>]*>\\s*([^<]+)`, "i"));
+                  radioGroups[vModelName].labels.push(labelMatch ? labelMatch[1].trim() : value);
+                }
+              }
+
+              // Also check for select with options that act like radio (single select)
+              const selectTypePattern = /<select[^>]*v-model=["'](\w*[Tt]ype)["'][^>]*>([^]*?)<\/select>/gi;
+              while ((match = selectTypePattern.exec(content)) !== null) {
+                const vModelName = match[1];
+                const optionsContent = match[2];
+                const optionMatches = [...optionsContent.matchAll(/value=["'](\w+)["'][^>]*>([^<]*)</gi)];
+                if (optionMatches.length > 0 && !radioGroups[vModelName]) {
+                  radioGroups[vModelName] = {
+                    values: optionMatches.map(m => m[1]),
+                    labels: optionMatches.map(m => m[2].trim() || m[1])
+                  };
+                }
+              }
+
+              for (const [name, group] of Object.entries(radioGroups)) {
+                if (!uiComponents.radioButtons.find(r => r.name === name && r.page === pagePath)) {
+                  // Check for conditional rendering based on radio value
+                  const linkedFields: Record<string, { show?: string[]; hide?: string[] }> = {};
+                  for (const value of group.values) {
+                    const showMatch = content.match(new RegExp(`v-if=["'][^"']*${name}\\s*===?\\s*["']${value}["'][^"']*["']`, "gi"));
+                    if (showMatch) {
+                      // Find what field is shown
+                      const fieldMatch = content.match(new RegExp(`v-if=["'][^"']*${name}[^"']*${value}[^"']*["'][^>]*>[\\s\\S]*?name=["'](\\w+)["']`, "i"));
+                      if (fieldMatch) {
+                        if (!linkedFields[value]) linkedFields[value] = {};
+                        linkedFields[value].show = [fieldMatch[1]];
+                      }
+                    }
+                  }
+
+                  uiComponents.radioButtons.push({
+                    page: pagePath || fileName,
+                    name: name,
+                    label: name.replace(/Type$/i, " 타입"),
+                    selector: `input[type="radio"][v-model*="${name}"], select[v-model*="${name}"]`,
+                    options: group.values.map((v, i) => ({ value: v, label: group.labels[i] })),
+                    linkedFields: Object.keys(linkedFields).length > 0 ? linkedFields : undefined,
+                    testScenarios: [
+                      "각 옵션 선택 시 값 변경 확인",
+                      "옵션 전환 시 이전 선택 해제 확인",
+                      Object.keys(linkedFields).length > 0 ? "선택값에 따른 연동 필드 표시/숨김 확인" : ""
+                    ].filter(Boolean)
+                  });
+                }
+              }
+
+              // 3. Toggle/Switch Analysis
+              // Patterns: vs-switch, vs-toggle, el-switch
+              const togglePattern = /<(?:vs-switch|vs-toggle|el-switch)[^>]*v-model=["'](\w+)["']/gi;
+              while ((match = togglePattern.exec(content)) !== null) {
+                const vModelName = match[1];
+                // Check for @change with confirm
+                const hasConfirm = content.includes(`@change`) && content.includes(`confirm`);
+                const autoSave = content.match(new RegExp(`${vModelName}[^}]*\\{[^}]*(?:api|fetch|axios|\\$http)`, "i")) !== null;
+
+                if (!uiComponents.toggles.find(t => t.name === vModelName && t.page === pagePath)) {
+                  uiComponents.toggles.push({
+                    page: pagePath || fileName,
+                    name: vModelName,
+                    label: vModelName.replace(/Yn$/i, "").replace(/([A-Z])/g, " $1").trim(),
+                    selector: `.vs-switch[v-model*="${vModelName}"], .vs-toggle[v-model*="${vModelName}"]`,
+                    autoSave: autoSave,
+                    confirmOnDisable: hasConfirm,
+                    testScenarios: [
+                      "토글 클릭 시 상태 즉시 변경",
+                      autoSave ? "상태 변경 시 API 호출 확인" : "",
+                      hasConfirm ? "비활성화 시 확인 다이얼로그 표시" : ""
+                    ].filter(Boolean)
+                  });
+                }
+              }
+
+              // 4. Dropdown/Select Analysis
+              // Patterns: <select, vs-select, el-select, :options
+              const selectPattern = /<(?:select|vs-select|el-select)[^>]*(?:v-model|name)=["'](\w+)["'][^>]*/gi;
+              while ((match = selectPattern.exec(content)) !== null) {
+                const vModelName = match[1];
+                const selectContext = content.substring(match.index, Math.min(match.index + 500, content.length));
+
+                // Check for options
+                const optionMatches = [...selectContext.matchAll(/<option[^>]*value=["']([^"']+)["'][^>]*>([^<]*)</gi)];
+                const hasOptionsBinding = selectContext.includes(":options") || selectContext.includes("v-for");
+                const isSearchable = selectContext.includes("searchable") || selectContext.includes("filterable");
+                const isMultiple = selectContext.includes("multiple");
+
+                if (!uiComponents.dropdowns.find(d => d.name === vModelName && d.page === pagePath)) {
+                  uiComponents.dropdowns.push({
+                    page: pagePath || fileName,
+                    name: vModelName,
+                    label: vModelName.replace(/([A-Z])/g, " $1").trim(),
+                    selector: `select[name="${vModelName}"], select[v-model*="${vModelName}"], .vs-select`,
+                    options: optionMatches.length > 0 ? optionMatches.map(m => m[1]) : undefined,
+                    optionSource: hasOptionsBinding ? "dynamic" : undefined,
+                    searchable: isSearchable || undefined,
+                    multiple: isMultiple || undefined,
+                    testScenarios: [
+                      "드롭다운 클릭 시 옵션 목록 표시",
+                      "옵션 선택 시 값 반영 확인",
+                      isSearchable ? "검색어 입력 시 필터링 동작" : "",
+                      isMultiple ? "다중 선택 시 모든 값 반영" : ""
+                    ].filter(Boolean)
+                  });
+                }
+              }
+
+              // 5. Input Validation Analysis
+              // Patterns: required, pattern, maxLength, validation rules
+              const inputPattern = /<(?:input|vs-input)[^>]*name=["'](\w+)["'][^>]*/gi;
+              while ((match = inputPattern.exec(content)) !== null) {
+                const inputName = match[1];
+                const inputContext = content.substring(Math.max(0, match.index - 200), Math.min(match.index + 500, content.length));
+
+                const validation: UIInputValidation["validation"] = {};
+                const errorMsgs: Record<string, string> = {};
+
+                // Check for required
+                if (inputContext.includes("required") || inputContext.match(new RegExp(`${inputName}[^}]*required`, "i"))) {
+                  validation.required = true;
+                }
+
+                // Check for pattern/URL validation
+                if (inputContext.includes("URL") || inputContext.includes("url") || inputContext.match(/pattern.*http/i)) {
+                  validation.pattern = "URL";
+                }
+
+                // Check for Korean restriction
+                if (inputContext.includes("한글") || inputContext.match(/[가-힣]/)) {
+                  validation.noKorean = true;
+                  const koreanErrorMatch = inputContext.match(/["']([^"']*한글[^"']*)["']/);
+                  if (koreanErrorMatch) errorMsgs.noKorean = koreanErrorMatch[1];
+                }
+
+                // Check for startsWith
+                if (inputContext.includes("startsWith") || inputContext.match(/시작.*해야/)) {
+                  const startsWithMatch = inputContext.match(/startsWith\s*\(\s*["']([^"']+)["']\)/);
+                  validation.startsWith = startsWithMatch ? startsWithMatch[1] : "/";
+                }
+
+                // Check for maxLength
+                const maxLengthMatch = inputContext.match(/maxLength[:\s=]*(\d+)|(\d+)자를?\s*초과/i);
+                if (maxLengthMatch) {
+                  validation.maxLength = parseInt(maxLengthMatch[1] || maxLengthMatch[2]);
+                }
+
+                // Find error messages
+                const errorMsgMatches = inputContext.matchAll(/["']([^"']*(?:입력|선택|필수|형식|초과|포함)[^"']*)["']/gi);
+                for (const errMatch of errorMsgMatches) {
+                  const msg = errMatch[1];
+                  if (msg.includes("입력") && validation.required) errorMsgs.required = msg;
+                  if (msg.includes("형식") && validation.pattern) errorMsgs.pattern = msg;
+                  if (msg.includes("초과") && validation.maxLength) errorMsgs.maxLength = msg;
+                }
+
+                if (Object.keys(validation).length > 0 && !uiComponents.inputValidations.find(v => v.name === inputName && v.page === pagePath)) {
+                  uiComponents.inputValidations.push({
+                    page: pagePath || fileName,
+                    form: fileName,
+                    name: inputName,
+                    selector: `input[name="${inputName}"]`,
+                    validation: validation,
+                    errorMsgs: errorMsgs,
+                    testScenarios: [
+                      validation.required ? "필수값 미입력 시 에러 메시지 확인" : "",
+                      validation.pattern ? "잘못된 형식 입력 시 에러 메시지 확인" : "",
+                      validation.maxLength ? `${validation.maxLength}자 초과 입력 시 에러 확인` : "",
+                      validation.noKorean ? "한글 입력 시 에러 메시지 확인" : "",
+                      validation.startsWith ? `${validation.startsWith}로 시작하지 않을 때 에러 확인` : ""
+                    ].filter(Boolean)
+                  });
+                }
+              }
+
+              // 6. Table Analysis
+              // Patterns: vs-table, el-table, :columns
+              const tablePattern = /<(?:vs-table|el-table|table)[^>]*(?:class=["'][^"']*table[^"']*["'])?/gi;
+              while ((match = tablePattern.exec(content)) !== null) {
+                const tableContext = content.substring(match.index, Math.min(match.index + 2000, content.length));
+
+                // Extract columns from th or column definitions
+                const columns: UITable["columns"] = [];
+                const thMatches = tableContext.matchAll(/<(?:vs-th|th)[^>]*>([^<]+)</gi);
+                for (const thMatch of thMatches) {
+                  const label = thMatch[1].trim();
+                  if (label && !label.includes("{{")) {
+                    columns.push({
+                      label: label,
+                      field: label.toLowerCase().replace(/\s+/g, "_"),
+                      sortable: tableContext.includes("sort") || tableContext.includes("@sort")
+                    });
+                  }
+                }
+
+                const hasPagination = tableContext.includes("pagination") || tableContext.includes("vs-pagination");
+                const hasRowClick = tableContext.includes("@row-click") || tableContext.includes("@click");
+                const emptyMsgMatch = tableContext.match(/(?:empty|no-data)[^>]*>([^<]+)</i);
+
+                if (columns.length > 0 && !uiComponents.tables.find(t => t.page === pagePath)) {
+                  uiComponents.tables.push({
+                    page: pagePath || fileName,
+                    name: fileName + "Table",
+                    selector: ".vs-table, .el-table, table",
+                    columns: columns.slice(0, 10), // Limit to first 10 columns
+                    pagination: hasPagination || undefined,
+                    emptyMsg: emptyMsgMatch ? emptyMsgMatch[1].trim() : undefined,
+                    rowClickAction: hasRowClick ? "navigate or detail" : undefined,
+                    testScenarios: [
+                      "테이블 데이터 로드 확인",
+                      "컬럼 헤더 표시 확인",
+                      hasPagination ? "페이징 동작 확인" : "",
+                      hasRowClick ? "행 클릭 시 상세 이동 확인" : "",
+                      emptyMsgMatch ? "빈 데이터 시 메시지 표시 확인" : ""
+                    ].filter(Boolean)
+                  });
+                }
+              }
+
+              // 7. Modal/Popup Analysis
+              // Patterns: vs-popup, vs-dialog, vs-modal
+              const modalPattern = /<(?:vs-popup|vs-dialog|vs-modal|el-dialog)[^>]*/gi;
+              while ((match = modalPattern.exec(content)) !== null) {
+                const modalContext = content.substring(match.index, Math.min(match.index + 1000, content.length));
+
+                const closeOnBackdrop = !modalContext.includes("close-on-backdrop=\"false\"") && !modalContext.includes(":close-on-backdrop=\"false\"");
+                const closeOnEsc = !modalContext.includes("close-on-esc=\"false\"") && !modalContext.includes(":close-on-esc=\"false\"");
+                const hasForm = modalContext.includes("<form") || modalContext.includes("<input") || modalContext.includes("<vs-input");
+
+                // Find open trigger
+                const triggerMatch = content.match(/(?:@click|v-on:click)=["'][^"']*(\w+Popup|open\w+)["']/i);
+
+                if (!uiComponents.modals.find(m => m.page === pagePath)) {
+                  uiComponents.modals.push({
+                    page: pagePath || fileName,
+                    name: fileName + "Modal",
+                    selector: ".vs-popup, .vs-dialog, .vs-modal, .el-dialog",
+                    openTrigger: triggerMatch ? triggerMatch[1] : undefined,
+                    closeOnBackdrop: closeOnBackdrop,
+                    closeOnEsc: closeOnEsc,
+                    hasForm: hasForm,
+                    testScenarios: [
+                      "열기 버튼 클릭 시 팝업 표시",
+                      "X 버튼 클릭 시 닫힘",
+                      closeOnEsc ? "ESC 키로 닫힘 확인" : "",
+                      closeOnBackdrop ? "배경 클릭 시 닫힘 확인" : "배경 클릭 시 닫히지 않음 확인",
+                      hasForm ? "폼 입력 후 저장 동작 확인" : ""
+                    ].filter(Boolean)
+                  });
+                }
+              }
             }));
           })());
         }
@@ -2375,7 +2798,60 @@ ${endpoints.map(e => `| ${e.method} | ${e.path} | ${e.controller} | ${e.auth ? "
 `;
         fs.writeFileSync(path.join(analysisDir, "be-analysis.md"), beAnalysisMd);
 
-        // FE Analysis MD
+        // FE Analysis MD (with UI Components)
+        const uiComponentsSummary = `
+## UI Components (E2E 테스트용)
+
+### Checkboxes (${uiComponents.checkboxes.length})
+${uiComponents.checkboxes.length > 0 ? `
+| Page | Name | Label | Selector | Test Scenarios |
+|------|------|-------|----------|----------------|
+${uiComponents.checkboxes.map(c => `| ${c.page} | ${c.name} | ${c.label} | ${c.selector} | ${c.testScenarios.join(", ")} |`).join("\n")}
+` : "없음"}
+
+### Radio Buttons (${uiComponents.radioButtons.length})
+${uiComponents.radioButtons.length > 0 ? `
+| Page | Name | Options | Test Scenarios |
+|------|------|---------|----------------|
+${uiComponents.radioButtons.map(r => `| ${r.page} | ${r.name} | ${r.options.map(o => o.value).join(", ")} | ${r.testScenarios.join(", ")} |`).join("\n")}
+` : "없음"}
+
+### Toggles/Switches (${uiComponents.toggles.length})
+${uiComponents.toggles.length > 0 ? `
+| Page | Name | AutoSave | ConfirmOnDisable | Test Scenarios |
+|------|------|----------|------------------|----------------|
+${uiComponents.toggles.map(t => `| ${t.page} | ${t.name} | ${t.autoSave || "No"} | ${t.confirmOnDisable || "No"} | ${t.testScenarios.join(", ")} |`).join("\n")}
+` : "없음"}
+
+### Dropdowns/Selects (${uiComponents.dropdowns.length})
+${uiComponents.dropdowns.length > 0 ? `
+| Page | Name | Options | Searchable | Test Scenarios |
+|------|------|---------|------------|----------------|
+${uiComponents.dropdowns.map(d => `| ${d.page} | ${d.name} | ${d.options?.join(", ") || d.optionSource || "dynamic"} | ${d.searchable || "No"} | ${d.testScenarios.join(", ")} |`).join("\n")}
+` : "없음"}
+
+### Input Validations (${uiComponents.inputValidations.length})
+${uiComponents.inputValidations.length > 0 ? `
+| Page | Name | Validation Rules | Error Messages | Test Scenarios |
+|------|------|------------------|----------------|----------------|
+${uiComponents.inputValidations.map(v => `| ${v.page} | ${v.name} | ${Object.entries(v.validation).map(([k,val]) => `${k}:${val}`).join(", ")} | ${Object.values(v.errorMsgs).join("; ") || "-"} | ${v.testScenarios.join(", ")} |`).join("\n")}
+` : "없음"}
+
+### Tables (${uiComponents.tables.length})
+${uiComponents.tables.length > 0 ? `
+| Page | Columns | Pagination | RowClick | Test Scenarios |
+|------|---------|------------|----------|----------------|
+${uiComponents.tables.map(t => `| ${t.page} | ${t.columns.map(c => c.label).join(", ")} | ${t.pagination || "No"} | ${t.rowClickAction || "No"} | ${t.testScenarios.join(", ")} |`).join("\n")}
+` : "없음"}
+
+### Modals/Popups (${uiComponents.modals.length})
+${uiComponents.modals.length > 0 ? `
+| Page | CloseOnEsc | CloseOnBackdrop | HasForm | Test Scenarios |
+|------|------------|-----------------|---------|----------------|
+${uiComponents.modals.map(m => `| ${m.page} | ${m.closeOnEsc} | ${m.closeOnBackdrop} | ${m.hasForm || "No"} | ${m.testScenarios.join(", ")} |`).join("\n")}
+` : "없음"}
+`;
+
         const feAnalysisMd = `# Frontend Analysis Report
 
 Generated: ${timestamp}
@@ -2393,11 +2869,21 @@ ${routes.map(r => `| ${r.path} | ${r.component} | ${r.auth ? "Yes" : "No"} | ${r
 |------|----------|------|
 ${selectors.slice(0, 100).map(s => `| ${s.name} | ${s.selector} | ${s.file} |`).join("\n")}
 ${selectors.length > 100 ? `\n... and ${selectors.length - 100} more selectors` : ""}
-
+${uiComponentsSummary}
 `;
         fs.writeFileSync(path.join(analysisDir, "fe-analysis.md"), feAnalysisMd);
 
-        // Test targets JSON
+        // Calculate total UI components
+        const totalUIComponents =
+          uiComponents.checkboxes.length +
+          uiComponents.radioButtons.length +
+          uiComponents.toggles.length +
+          uiComponents.dropdowns.length +
+          uiComponents.inputValidations.length +
+          uiComponents.tables.length +
+          uiComponents.modals.length;
+
+        // Test targets JSON (with UI Components)
         const testTargets = {
           generated_at: timestamp,
           config_file: config_path,
@@ -2412,6 +2898,25 @@ ${selectors.length > 100 ? `\n... and ${selectors.length - 100} more selectors` 
             selectors: selectors.map(s => ({ [s.name]: s.selector })).reduce((a, b) => ({...a, ...b}), {}),
             total_routes: routes.length,
             total_selectors: selectors.length
+          },
+          ui_components: {
+            checkboxes: uiComponents.checkboxes,
+            radioButtons: uiComponents.radioButtons,
+            toggles: uiComponents.toggles,
+            dropdowns: uiComponents.dropdowns,
+            inputValidations: uiComponents.inputValidations,
+            tables: uiComponents.tables,
+            modals: uiComponents.modals,
+            summary: {
+              total: totalUIComponents,
+              checkboxes: uiComponents.checkboxes.length,
+              radioButtons: uiComponents.radioButtons.length,
+              toggles: uiComponents.toggles.length,
+              dropdowns: uiComponents.dropdowns.length,
+              inputValidations: uiComponents.inputValidations.length,
+              tables: uiComponents.tables.length,
+              modals: uiComponents.modals.length
+            }
           }
         };
         fs.writeFileSync(path.join(analysisDir, "test-targets.json"), JSON.stringify(testTargets, null, 2));
@@ -2428,14 +2933,24 @@ ${selectors.length > 100 ? `\n... and ${selectors.length - 100} more selectors` 
               summary: {
                 be_endpoints: endpoints.length,
                 fe_routes: routes.length,
-                fe_selectors: selectors.length
+                fe_selectors: selectors.length,
+                ui_components: totalUIComponents
+              },
+              ui_component_details: {
+                checkboxes: uiComponents.checkboxes.length,
+                radioButtons: uiComponents.radioButtons.length,
+                toggles: uiComponents.toggles.length,
+                dropdowns: uiComponents.dropdowns.length,
+                inputValidations: uiComponents.inputValidations.length,
+                tables: uiComponents.tables.length,
+                modals: uiComponents.modals.length
               },
               files: [
                 path.join(analysisDir, "be-analysis.md"),
                 path.join(analysisDir, "fe-analysis.md"),
                 path.join(analysisDir, "test-targets.json")
               ],
-              message: `✅ 코드 분석 완료 (${(duration/1000).toFixed(1)}초): BE ${endpoints.length}개 엔드포인트, FE ${routes.length}개 라우트, ${selectors.length}개 셀렉터`
+              message: `✅ 코드 분석 완료 (${(duration/1000).toFixed(1)}초): BE ${endpoints.length}개 엔드포인트, FE ${routes.length}개 라우트, ${selectors.length}개 셀렉터, UI 컴포넌트 ${totalUIComponents}개`
             }, null, 2)
           }]
         };
@@ -2981,10 +3496,11 @@ ${selectors.length > 100 ? `\n... and ${selectors.length - 100} more selectors` 
       }
 
       case "e2e_generate_code": {
-        const { scenario_path, output_dir, config_path } = args as {
+        const { scenario_path, output_dir, config_path, dashboard_url } = args as {
           scenario_path: string;
           output_dir: string;
           config_path?: string;
+          dashboard_url?: string;
         };
 
         if (!fs.existsSync(scenario_path)) {
@@ -3141,25 +3657,73 @@ ${selectors.length > 100 ? `\n... and ${selectors.length - 100} more selectors` 
         // Generate Playwright Code from Parsed TCs
         // ========================================
         function generateStepCode(step: ParsedTC["steps"][0], screenshotDir: string, tcId: string): string {
-          const { actionType, selector, value, step: stepNum } = step;
+          const { actionType, selector, value, step: stepNum, description } = step;
           const indent = "      ";
+          const stepIdx = stepNum - 1; // 0-indexed for dashboard
+          const stepName = description || step.action || actionType;
+          const escapedStepName = stepName.replace(/'/g, "\\'").replace(/`/g, "\\`");
+
+          // Wrap action with dashboard progress + terminal output
+          function wrapWithProgress(actionCode: string, observationCode?: string): string {
+            const obsCode = observationCode || `addObservation('${tcId}', '${escapedStepName} 완료');`;
+            return `${indent}// Step ${stepNum}: ${stepName}
+${indent}console.log('    [${stepNum}] ${escapedStepName}...');
+${indent}await dashboardTCStep('${tcId}', ${stepIdx}, '${escapedStepName}', 'running', '실행 중...');
+${indent}try {
+${actionCode}
+${indent}  ${obsCode}
+${indent}  await dashboardTCStep('${tcId}', ${stepIdx}, '${escapedStepName}', 'passed', '완료');
+${indent}} catch (e) {
+${indent}  console.log('    [${stepNum}] ❌ 실패: ' + e.message);
+${indent}  await dashboardTCStep('${tcId}', ${stepIdx}, '${escapedStepName}', 'failed', e.message);
+${indent}  throw e;
+${indent}}`;
+          }
+
+          // 셀렉터 안전화: 여러 요소가 있을 경우 visible한 첫 번째 요소 선택
+          const safeSelector = selector.includes(':visible') ? selector : selector;
 
           switch (actionType) {
             case "navigate":
-              return `${indent}await page.goto('${selector}');\n${indent}await page.waitForLoadState('networkidle');`;
+              return wrapWithProgress(
+                `${indent}  await page.goto('${selector}');\n${indent}  await page.waitForLoadState('networkidle');`,
+                `addObservation('${tcId}', '페이지 이동: ${selector}');`
+              );
             case "click":
-              return `${indent}await page.click('${selector}');`;
+              // locator().first()로 visible한 첫 번째 요소 클릭
+              return wrapWithProgress(
+                `${indent}  await page.locator('${selector}').filter({ visible: true }).first().click();`,
+                `addObservation('${tcId}', '클릭: ${escapedStepName}');`
+              );
             case "type":
             case "fill":
-              return `${indent}await page.fill('${selector}', '${value || ""}');`;
+              // locator().first()로 visible한 첫 번째 요소에 입력
+              return wrapWithProgress(
+                `${indent}  await page.locator('${selector}').filter({ visible: true }).first().fill('${value || ""}');`,
+                `addObservation('${tcId}', '입력: ${escapedStepName}');`
+              );
             case "select":
-              return `${indent}await page.selectOption('${selector}', '${value || ""}');`;
+              // selectOption은 locator 사용
+              return wrapWithProgress(
+                `${indent}  await page.locator('${selector}').filter({ visible: true }).first().selectOption('${value || ""}');`,
+                `addObservation('${tcId}', '선택: ${value || selector}');`
+              );
             case "wait":
-              return `${indent}await page.waitForSelector('${selector}', { state: 'visible' });`;
+              // visible 상태로 대기
+              return wrapWithProgress(
+                `${indent}  await page.locator('${selector}').filter({ visible: true }).first().waitFor({ state: 'visible', timeout: 15000 });`,
+                `addObservation('${tcId}', '요소 표시됨: ${escapedStepName}');`
+              );
             case "assert":
-              return `${indent}await expect(page.locator('${selector}')).toBeVisible();`;
+              return wrapWithProgress(
+                `${indent}  await expect(page.locator('${selector}').filter({ visible: true }).first()).toBeVisible();`,
+                `addObservation('${tcId}', '검증 통과: ${escapedStepName}');`
+              );
             case "screenshot":
-              return `${indent}await page.screenshot({ path: \`\${screenshotDir}/${tcId}-step${stepNum}.png\` });`;
+              return wrapWithProgress(
+                `${indent}  await page.screenshot({ path: \`\${screenshotDir}/${tcId}-step${stepNum}.png\` });`,
+                `addObservation('${tcId}', '스크린샷 저장');`
+              );
             default:
               return `${indent}// TODO: Implement action - ${step.action}`;
           }
@@ -3192,10 +3756,152 @@ ${tc.expectedResults.map(r => `      // - ${r}`).join("\n") || "      // Verify 
           keycloakUrl: config.auth.keycloak_url || ''
         } : null;
 
+        // Browser configuration from config or defaults
+        const slowMo = config?.test_server?.slow_mo ?? 0;
+        const headless = config?.test_server?.headless ?? false;
+
+        // Dashboard URL for real-time progress
+        const dashboardEnabled = !!dashboard_url;
+
         // Generate complete test file
         const testCode = `const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
+
+// ===== Dashboard Configuration =====
+const DASHBOARD_URL = ${dashboard_url ? `'${dashboard_url}'` : 'null'};
+
+// Dashboard helper functions
+async function dashboardPost(endpoint, data) {
+  if (!DASHBOARD_URL) return;
+  try {
+    const url = new URL(endpoint, DASHBOARD_URL);
+    const postData = JSON.stringify(data);
+    const options = {
+      hostname: url.hostname,
+      port: url.port,
+      path: url.pathname,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData)
+      }
+    };
+    return new Promise((resolve) => {
+      const req = http.request(options, (res) => {
+        res.on('data', () => {});
+        res.on('end', resolve);
+      });
+      req.on('error', () => resolve());
+      req.write(postData);
+      req.end();
+    });
+  } catch (e) {
+    // Ignore dashboard errors
+  }
+}
+
+async function dashboardTCStart(tcId, name) {
+  await dashboardPost('/api/tc/start', { tcId, name });
+}
+
+async function dashboardTCStep(tcId, stepIndex, stepName, status, message) {
+  await dashboardPost('/api/tc/step', { tcId, stepIndex, stepName, status, message });
+}
+
+async function dashboardTCComplete(tcId, status, message, screenshot) {
+  await dashboardPost('/api/tc/complete', { tcId, status, message, screenshot });
+}
+
+async function dashboardLoadScenarios(scenarioPath) {
+  if (!DASHBOARD_URL) {
+    console.log('📊 Dashboard: Not configured (no DASHBOARD_URL)');
+    return;
+  }
+  await dashboardPost('/api/load-scenarios', { scenarioPath });
+  console.log('📊 Dashboard: Scenarios loaded from ' + scenarioPath);
+}
+
+async function checkDashboardConnection() {
+  if (!DASHBOARD_URL) return false;
+  try {
+    const url = new URL('/api/state', DASHBOARD_URL);
+    return new Promise((resolve) => {
+      const req = http.get(url.href, (res) => {
+        resolve(res.statusCode === 200);
+      });
+      req.on('error', () => resolve(false));
+      req.setTimeout(2000, () => { req.destroy(); resolve(false); });
+    });
+  } catch (e) {
+    return false;
+  }
+}
+
+// ===== Page Inspection Helpers =====
+async function getTableInfo(page, tcId) {
+  try {
+    // Get table headers
+    const headers = await page.locator('table thead th').allTextContents();
+    if (headers.length > 0) {
+      addObservation(tcId, '테이블 컬럼: ' + headers.join(', '));
+    }
+
+    // Get row count
+    const rowCount = await page.locator('table tbody tr').count();
+    if (rowCount > 0) {
+      addObservation(tcId, '테이블 행 수: ' + rowCount + '개');
+    }
+
+    // Get pagination info (common patterns)
+    const paginationText = await page.locator('[class*="pagination"], [class*="paging"], .MuiTablePagination-displayedRows').first().textContent().catch(() => null);
+    if (paginationText) {
+      addObservation(tcId, '페이징: ' + paginationText.trim());
+    }
+
+    return { headers, rowCount, paginationText };
+  } catch (e) {
+    return null;
+  }
+}
+
+async function getFormFields(page, tcId) {
+  try {
+    const inputs = await page.locator('input:visible, select:visible, textarea:visible').count();
+    if (inputs > 0) {
+      addObservation(tcId, '폼 필드: ' + inputs + '개');
+    }
+    return inputs;
+  } catch (e) {
+    return 0;
+  }
+}
+
+async function getVisibleButtons(page, tcId) {
+  try {
+    const buttons = await page.locator('button:visible').allTextContents();
+    const filtered = buttons.filter(b => b.trim()).slice(0, 5);
+    if (filtered.length > 0) {
+      addObservation(tcId, '버튼: ' + filtered.join(', '));
+    }
+    return filtered;
+  } catch (e) {
+    return [];
+  }
+}
+
+async function getToastMessage(page, tcId) {
+  try {
+    const toast = await page.locator('[class*="toast"], [class*="snackbar"], [class*="notification"], [role="alert"]').first().textContent({ timeout: 3000 }).catch(() => null);
+    if (toast) {
+      addObservation(tcId, '알림: ' + toast.trim());
+    }
+    return toast;
+  } catch (e) {
+    return null;
+  }
+}
 
 // ===== Auth Configuration =====
 const AUTH_CONFIG = ${JSON.stringify(authConfig, null, 2)};
@@ -3203,9 +3909,11 @@ const AUTH_FILE = 'playwright/.auth/user.json';
 
 (async () => {
   // ===== Browser Configuration =====
+  // slowMo: ${slowMo}ms (config.test_server.slow_mo)
+  // headless: ${headless} (config.test_server.headless)
   const browser = await chromium.launch({
-    headless: false,
-    slowMo: 500
+    headless: ${headless},
+    slowMo: ${slowMo}
   });
 
   // ===== Auth Helper Functions =====
@@ -3330,25 +4038,71 @@ const AUTH_FILE = 'playwright/.auth/user.json';
   }
 
   // ===== Helper Functions =====
+  // Test observations storage
+  const testObservations = {};
+
+  function addObservation(tcId, observation) {
+    if (!testObservations[tcId]) testObservations[tcId] = [];
+    testObservations[tcId].push(observation);
+    console.log(\`    - \${observation}\`);
+  }
+
   async function runTest(name, testFn) {
-    console.log(\`\\n[테스트] \${name}\`);
+    console.log(\`\\n${'='.repeat(60)}\`);
+    console.log(\`[테스트 시작] \${name}\`);
+    console.log(\`${'='.repeat(60)}\`);
+
+    const tcId = name.split(':')[0].trim();
+    const tcName = name.split(':').slice(1).join(':').trim();
+    testObservations[tcId] = [];
+
+    // Dashboard: TC Start
+    await dashboardTCStart(tcId, tcName);
+
     const startTime = Date.now();
     try {
       await testFn();
       const duration = Date.now() - startTime;
-      console.log(\`  ✓ PASS (\${duration}ms)\`);
-      results.push({ test: name, status: 'PASS', duration });
+
+      // Print success with observations
+      console.log(\`\\n✅ \${tcId} PASS: \${tcName}\`);
+      if (testObservations[tcId].length > 0) {
+        testObservations[tcId].forEach(obs => console.log(\`  - \${obs}\`));
+      }
+      console.log(\`  ⏱️  소요시간: \${duration}ms\`);
+
+      results.push({ test: name, status: 'PASS', duration, observations: testObservations[tcId] });
+
+      // Dashboard: TC Complete (passed)
+      await dashboardTCComplete(tcId, 'passed', \`완료 (\${duration}ms)\`);
+
+      console.log(\`\\n다음 테스트를 진행합니다.\\n\`);
     } catch (error) {
       const duration = Date.now() - startTime;
-      console.log(\`  ✗ FAIL: \${error.message}\`);
-      results.push({ test: name, status: 'FAIL', duration, error: error.message });
-      await page.screenshot({
-        path: \`\${screenshotDir}/fail-\${name.replace(/[:\\s]+/g, '-')}.png\`
-      });
+
+      // Print failure with details
+      console.log(\`\\n❌ \${tcId} FAIL: \${tcName}\`);
+      console.log(\`  에러: \${error.message}\`);
+      if (testObservations[tcId].length > 0) {
+        console.log(\`  진행된 단계:\`);
+        testObservations[tcId].forEach(obs => console.log(\`    - \${obs}\`));
+      }
+
+      const screenshotPath = \`\${screenshotDir}/fail-\${name.replace(/[:\\s]+/g, '-')}.png\`;
+      await page.screenshot({ path: screenshotPath });
+      console.log(\`  스크린샷: \${screenshotPath}\`);
+
+      results.push({ test: name, status: 'FAIL', duration, error: error.message, observations: testObservations[tcId] });
+
+      // Dashboard: TC Complete (failed)
+      await dashboardTCComplete(tcId, 'failed', error.message, screenshotPath);
     }
   }
 
   try {
+    // ===== Load Scenarios to Dashboard =====
+    await dashboardLoadScenarios('${scenario_path}');
+
     // ===== Generated from: ${scenario_path} =====
     // Total Test Cases: ${parsedTCs.length}
 ${config?.test_server?.fe_url ? `

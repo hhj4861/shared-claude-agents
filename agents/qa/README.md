@@ -1,460 +1,1024 @@
-# QA Agents - 테스트 자동화 파이프라인
+# QA Pipeline
 
-QA 시나리오 생성부터 E2E 테스트 실행까지 자동화하는 에이전트 시스템입니다.
+Claude Code 기반 자동화된 QA 테스트 파이프라인입니다.
+
+---
 
 ## 목차
 
-- [아키텍처 개요](#아키텍처-개요)
-- [에이전트 구성](#에이전트-구성)
-- [스킬 (Slash Commands)](#스킬-slash-commands)
-- [MCP 서버](#mcp-서버)
-- [디렉토리 구조](#디렉토리-구조)
-- [사용법](#사용법)
-- [설정](#설정)
+### 1. 개요
+- [1.1 전체 아키텍처](#11-전체-아키텍처)
+- [1.2 에이전트 구성](#12-에이전트-구성)
+- [1.3 디렉토리 구조](#13-디렉토리-구조)
+
+### 2. 명령어 가이드
+- [2.1 Skills (슬래시 명령어)](#21-skills-슬래시-명령어)
+- [2.2 자연어 입력](#22-자연어-입력)
+
+### 3. QA 시나리오 생성 (/qa-scenario)
+- [3.1 실행 흐름 (Sequence)](#31-실행-흐름-sequence)
+- [3.2 파이프라인 상세](#32-파이프라인-상세)
+
+### 4. E2E 테스트 실행 (/e2e-test)
+- [4.1 실행 흐름 (Sequence)](#41-실행-흐름-sequence)
+- [4.2 Playwright MCP 동작 원리](#42-playwright-mcp-동작-원리)
+- [4.3 대시보드 동기화](#43-대시보드-동기화)
+- [4.4 TC 그룹핑 규칙](#44-tc-그룹핑-규칙)
+
+### 5. 참조
+- [5.1 사전 조건](#51-사전-조건)
+- [5.2 주의사항](#52-주의사항)
+- [5.3 테스트 결과 예시](#53-테스트-결과-예시)
 
 ---
 
-## 아키텍처 개요
+# 1. 개요
+
+## 1.1 전체 아키텍처
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         QA Pipeline Architecture                         │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            QA Pipeline Architecture                         │
+└─────────────────────────────────────────────────────────────────────────────┘
 
-사용자 요청: "QA 시나리오 만들어줘" 또는 /qa-scenario
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│  _orchestrator (qa-director)                                  [Sonnet]  │
-│  ────────────────────────────────────────────────────────────────────── │
-│  • 파이프라인 전체 조율                                                  │
-│  • 서브에이전트 순차 호출                                                │
-│  • 각 단계 완료 검증                                                     │
-└─────────────────────────────────────────────────────────────────────────┘
-         │
-         ├──────────────────┬──────────────────┬──────────────────┐
-         ▼                  ▼                  ▼                  ▼
-┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
-│ step1           │ │ step2           │ │ step3           │ │ step4           │
-│ doc-collector   │ │ code-analyzer   │ │ scenario-writer │ │ e2e-tester      │
-│ [Sonnet]        │ │ [Sonnet]        │ │ [Opus]          │ │ [Sonnet]        │
-│                 │ │                 │ │                 │ │                 │
-│ • 문서 수집     │ │ • BE/FE 분석    │ │ • 시나리오 작성 │ │ • E2E 테스트    │
-│ • 변환 검증     │ │ • API 엔드포인트│ │ • TC 생성       │ │ • Playwright    │
-└─────────────────┘ └─────────────────┘ └─────────────────┘ └─────────────────┘
-         │                  │                  │                  │
-         ▼                  ▼                  ▼                  ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                            MCP Servers                                   │
-├─────────────────┬─────────────────┬─────────────────┬───────────────────┤
-│ qa-pipeline     │ doc-converter   │ playwright      │ atlassian         │
-│ (로컬)          │ (로컬)          │ (npx)           │ (SSE)             │
-└─────────────────┴─────────────────┴─────────────────┴───────────────────┘
-```
-
----
-
-## 에이전트 구성
-
-### 메인 에이전트
-
-| 에이전트 | 파일 | 모델 | 역할 |
-|----------|------|------|------|
-| **qa-director** | `_orchestrator.md` | **Sonnet** | 파이프라인 총괄, 순차 호출, 상태 관리 |
-
-### 서브에이전트
-
-| 단계 | 에이전트 | 파일 | 모델 | 역할 |
-|------|----------|------|------|------|
-| Step 1 | doc-collector | `step1-doc-collector.md` | **Sonnet** | 참조 문서 수집 (Confluence, Swagger, Figma) |
-| Step 2 | code-analyzer | `step2-code-analyzer.md` | **Sonnet** | BE/FE 소스코드 분석, API 엔드포인트 추출 |
-| Step 3 | scenario-writer | `step3-scenario-writer.md` | **Opus** | 테스트 시나리오 문서 작성 |
-| Step 4a | backend-tester | `step4-backend-tester.md` | **Sonnet** | API 테스트 코드 생성 (Jest + Supertest) |
-| Step 4b | e2e-tester | `step4-e2e-tester.md` | **Sonnet** | E2E 테스트 실행 (Playwright) |
-
-### 보조 에이전트
-
-| 에이전트 | 파일 | 모델 | 역할 |
-|----------|------|------|------|
-| demo-recorder | `demo-recorder.md` | Sonnet | 데모 영상 레코딩 |
-| demo-script-generator | `demo-script-generator.md` | Sonnet | 데모 스크립트 생성 |
-
-### 모델 선택 기준
-
-```yaml
-Opus 사용 (step3만):
-  - 고품질 시나리오 문서 생성
-  - TC 품질 및 커버리지 판단
-  - 복잡한 도메인 이해 필요
-
-Sonnet 사용 (나머지 전체):
-  - 파이프라인 조율 (순차 호출, 상태 관리)
-  - 문서 수집/변환 (반복 작업)
-  - 코드 분석 (패턴 매칭)
-  - 테스트 코드 생성
-  - 빠른 응답, 비용 효율
+                              ┌─────────────────┐
+                              │   사용자 요청    │
+                              │ (자연어/명령어)  │
+                              └────────┬────────┘
+                                       │
+         ┌─────────────────────────────┼─────────────────────────────┐
+         │                             │                             │
+         ▼                             ▼                             ▼
+┌─────────────────────┐   ┌─────────────────────┐   ┌─────────────────────┐
+│   /e2e-test         │   │   /qa-scenario      │   │   /api-test         │
+│   /commit           │   │                     │   │                     │
+│   /review-pr        │   │    qa-director      │   │    qa-director      │
+│                     │   │   (오케스트레이터)   │   │   (오케스트레이터)   │
+│  ★ 메인 에이전트    │   └──────────┬──────────┘   └──────────┬──────────┘
+│     직접 실행       │              │                         │
+│                     │              ▼                         ▼
+│  - Playwright MCP   │   ┌─────────────────────┐   ┌─────────────────────┐
+│  - Git 명령어       │   │   시나리오 생성      │   │    API 테스트       │
+│  - gh CLI           │   │   파이프라인         │   │                     │
+└─────────────────────┘   │                     │   │ step4-backend-tester│
+                          │ step1 → step2 →    │   │                     │
+                          │        step3       │   │  - HTTP 요청 실행   │
+                          └─────────────────────┘   │  - 응답 검증        │
+                                                    └─────────────────────┘
 ```
 
 ---
 
-## 스킬 (Slash Commands)
+## 1.2 에이전트 구성
 
-### `/qa-scenario`
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                             Agent Architecture                              │
+└─────────────────────────────────────────────────────────────────────────────┘
 
-QA 시나리오 생성 파이프라인을 시작합니다.
-
-```bash
-# 일반 모드 - 웹 폼으로 상세 설정
-/qa-scenario
-
-# 자동 모드 - git diff 기반 자동 분석
-/qa-scenario --auto
+                              ┌─────────────────┐
+                              │   qa-director   │
+                              │  (오케스트레이터)│
+                              └────────┬────────┘
+                                       │
+        ┌──────────────────────────────┼──────────────────────────────┐
+        │                              │                              │
+        ▼                              ▼                              ▼
+┌───────────────┐            ┌───────────────┐            ┌───────────────┐
+│ 시나리오 생성  │            │   E2E 테스트  │            │  API 테스트   │
+│   Pipeline    │            │               │            │               │
+└───────┬───────┘            │step4-e2e-tester│           │step4-backend- │
+        │                    │               │            │    tester     │
+        ▼                    └───────────────┘            └───────────────┘
+┌───────────────┐                    │                           │
+│step1-doc-     │                    │                           │
+│  collector    │                    ▼                           ▼
+│               │            ┌───────────────┐            ┌───────────────┐
+│ - Confluence  │            │ Playwright    │            │ HTTP Client   │
+│ - Swagger     │            │ MCP Server    │            │               │
+│ - PDF/DOCX    │            │               │            │ - REST API    │
+└───────┬───────┘            │ - Chrome      │            │ - 응답 검증   │
+        │                    │ - 자동화      │            └───────────────┘
+        ▼                    └───────────────┘
+┌───────────────┐
+│step1.5-project│
+│  -detector    │ ⭐ NEW
+│               │
+│ - 빌드파일 감지│
+│ - 프레임워크  │
+│ - 동적 패턴   │
+└───────┬───────┘
+        │
+        ▼
+┌───────────────┐
+│step2-code-    │
+│  analyzer     │
+│               │
+│ - BE 분석     │
+│ - FE 분석     │
+│ - 엔드포인트  │
+└───────┬───────┘
+        │
+        ▼
+┌───────────────┐
+│step3-scenario-│
+│    writer     │
+│               │
+│ - TC 생성     │
+│ - 스텝 정의   │
+│ - 우선순위    │
+└───────┬───────┘
+        │
+        ▼
+┌───────────────┐
+│step3.5-       │
+│ scenario-     │ 🆕 선택적
+│  reviewer     │
+│               │
+│ - Gemini CLI  │
+│ - 교차 검토   │
+│ - 누락 발견   │
+└───────────────┘
 ```
 
-**출력물:**
-- `docs/qa/latest/config.json` - 설정 파일
-- `docs/qa/latest/references/` - 수집된 참조 문서
-- `docs/qa/latest/analysis/` - 코드 분석 결과
-- `docs/qa/latest/scenarios/` - 테스트 시나리오
+### 에이전트 역할 테이블
 
-### `/api-test`
-
-시나리오 기반 API 테스트 코드를 생성하고 실행합니다.
-
-```bash
-# 전체 API 테스트
-/api-test
-
-# 특정 기능 테스트
-/api-test auth
-/api-test users
-```
-
-**사전 조건:** `/qa-scenario` 완료 필수
-
-### `/e2e-test`
-
-시나리오 기반 E2E 테스트를 실행합니다.
-
-```bash
-# 전체 E2E 테스트
-/e2e-test
-
-# 특정 기능 테스트
-/e2e-test login
-/e2e-test menu-management
-```
-
-**사전 조건:** `/qa-scenario` 완료 필수
+| 에이전트 | 역할 | 도구 |
+|---------|------|------|
+| `qa-director` | QA 파이프라인 총괄 오케스트레이터 | Task, MCP tools |
+| `step1-doc-collector` | 문서 수집 (Confluence, Swagger 등) | WebFetch, Atlassian MCP |
+| `step1.5-project-detector` | 프로젝트 구조 분석 (프레임워크, 패턴 감지) | Glob, Grep, Read |
+| `step2-code-analyzer` | 소스코드 분석 (API, 라우트, 컴포넌트) | Glob, Grep, Read |
+| `step3-scenario-writer` | 테스트 시나리오 작성 | Read, Write |
+| `step3.5-scenario-reviewer` | 시나리오 외부 검토 (Gemini CLI) 🆕 선택적 | Bash, Read, Write |
+| `step4-e2e-tester` | E2E 브라우저 테스트 실행 | Playwright MCP |
+| `step4-backend-tester` | API 테스트 실행 | Bash (curl/httpie) |
 
 ---
 
-## MCP 서버
-
-### 로컬 MCP (직접 빌드)
-
-| MCP | 경로 | 주요 도구 |
-|-----|------|----------|
-| **qa-pipeline** | `mcp-servers/qa-pipeline/` | `qa_load_config`, `qa_verify_scenario`, `e2e_generate_code`, `e2e_check_auth` |
-| **doc-converter** | `mcp-servers/doc-converter/` | `convert_pdf_to_md`, `convert_docx_to_md`, `format_markdown` |
-
-### External MCP (npx)
-
-| MCP | 명령 | 주요 도구 | 용도 |
-|-----|------|----------|------|
-| **playwright** | `npx @playwright/mcp@latest` | `browser_navigate`, `browser_click`, `browser_snapshot` | Web E2E 테스트 |
-| **appium-mcp** | `npx -y appium-mcp@latest` | `appium_start_session`, `appium_tap` | 모바일 앱 테스트 |
-| **swagger-mcp** | `npx -y @anthropic-community/swagger-mcp-server` | `load_swagger`, `list_endpoints` | API 명세 분석 |
-| **figma** | `npx -y figma-developer-mcp --stdio` | `get_figma_data`, `get_components` | UI 디자인 참조 |
-| **atlassian** | SSE: `https://mcp.atlassian.com/v1/sse` | `confluence_get_page`, `jira_get_issue` | Confluence/Jira 연동 |
-
-### qa-pipeline MCP 도구 상세
-
-#### QA 파이프라인 도구
-
-| 도구 | 설명 |
-|------|------|
-| `qa_load_config` | 설정 파일 로드 및 검증 |
-| `qa_update_step` | 파이프라인 단계 상태 업데이트 |
-| `qa_get_progress` | 현재 진행 상태 조회 |
-| `qa_extract_metadata` | 원본 문서 메타데이터 추출 |
-| `qa_verify_conversion` | 문서 변환 품질 검증 (LLM 포함) |
-| `qa_verify_documents` | 수집된 문서 완전성 검증 |
-| `qa_verify_scenario` | 시나리오 품질 검증 |
-| `qa_get_summary` | 파이프라인 실행 요약 |
-
-#### E2E 테스트 도구
-
-| 도구 | 설명 |
-|------|------|
-| `e2e_check_auth` | 저장된 인증 상태 유효성 확인 |
-| `e2e_parse_scenario` | E2E 시나리오 파싱 |
-| `e2e_generate_code` | 시나리오 → Playwright 코드 자동 생성 |
-| `e2e_match_selector` | 스냅샷 기반 셀렉터 매칭 |
-| `e2e_update_result` | 개별 TC 결과 기록 |
-| `e2e_create_report` | 테스트 결과 리포트 생성 |
-
----
-
-## 디렉토리 구조
-
-### 에이전트/스킬 위치
+## 1.3 디렉토리 구조
 
 ```
-~/.claude/
-├── shared-agents/
-│   ├── agents/
-│   │   └── qa/
-│   │       ├── _orchestrator.md        # 메인 오케스트레이터
-│   │       ├── step1-doc-collector.md  # 문서 수집
-│   │       ├── step2-code-analyzer.md  # 코드 분석
-│   │       ├── step3-scenario-writer.md # 시나리오 작성
-│   │       ├── step4-backend-tester.md # API 테스트
-│   │       ├── step4-e2e-tester.md     # E2E 테스트
-│   │       └── archived/               # 구버전 보관
-│   │
-│   ├── skills/
-│   │   ├── qa-scenario/SKILL.md
-│   │   ├── api-test/SKILL.md
-│   │   └── e2e-test/SKILL.md
-│   │
-│   ├── mcp-servers/
-│   │   ├── qa-pipeline/
-│   │   └── doc-converter/
-│   │
-│   └── scripts/
-│       └── qa-input-form/              # 웹 폼 UI
-│
-├── agents -> shared-agents/agents      # 심볼릭 링크
-└── skills -> shared-agents/skills      # 심볼릭 링크
-```
-
-### 프로젝트 출력물 구조
-
-```
-{project}/docs/qa/
-├── latest/                     ← 현재 실행 결과 (심볼릭 링크)
-│   ├── config.json             # 설정 파일
-│   ├── references/             # 수집된 참조 문서
-│   │   ├── prd/
-│   │   ├── api/
-│   │   ├── design/
-│   │   └── policy/
-│   ├── analysis/               # 코드 분석 결과
-│   │   ├── be-analysis.md
-│   │   ├── fe-analysis.md
-│   │   └── test-targets.json
-│   ├── scenarios/              # 테스트 시나리오
-│   │   ├── {feature}-api.md
-│   │   └── {feature}-e2e.md
-│   ├── reports/                # 테스트 결과 리포트
-│   │   ├── api-report-{date}.md
-│   │   └── e2e-report-{date}.md
-│   └── screenshots/            # E2E 스크린샷
-│
-├── 2026-01-09T14-30-52/        ← 히스토리 (run_id)
-├── 2026-01-08T09-15-30/
-└── ...
+docs/qa/
+├── README.md                    # 이 문서
+└── latest/                      # 최신 QA 결과
+    ├── config.json              # 파이프라인 설정
+    ├── config-state.json        # 파이프라인 상태
+    │
+    ├── references/              # Step 1: 수집된 문서
+    │   ├── prd/                 # PRD 문서
+    │   ├── api/                 # API 명세서
+    │   ├── policy/              # 정책 문서
+    │   └── index.md             # 참조 인덱스
+    │
+    ├── analysis/                # Step 1.5~2: 분석 결과
+    │   ├── project-structure.json # 프로젝트 구조 (Step 1.5)
+    │   ├── be-analysis.md       # BE 분석 (Step 2)
+    │   ├── fe-analysis.md       # FE 분석 (Step 2)
+    │   └── test-targets.json    # 테스트 대상 (Step 2)
+    │
+    ├── scenarios/               # Step 3: 테스트 시나리오
+    │   ├── e2e-scenarios.md     # E2E 시나리오
+    │   ├── api-scenarios.md     # API 시나리오
+    │   └── edge-cases.md        # 엣지 케이스
+    │
+    ├── review/                  # Step 3.5: 시나리오 검토 🆕
+    │   └── scenario-review.md   # Gemini 검토 결과
+    │
+    ├── playwright/              # Playwright 관련
+    │   └── .auth/               # 인증 상태 저장
+    │       └── user.json        # 세션 쿠키/토큰
+    │
+    └── reports/                 # Step 4: 테스트 결과
+        ├── e2e-report-*.md      # E2E 리포트
+        ├── e2e-test-results.json
+        └── screenshots/         # 스크린샷
 ```
 
 ---
 
-## 사용법
+# 2. 명령어 가이드
 
-### 1. 설치
+## 2.1 Skills (슬래시 명령어)
 
-```bash
-# 최초 설치
-cd shared-claude-agents
-./install.sh
+### 전체 명령어 목록
 
-# MCP 업데이트 (모든 계정에 적용)
-./update-mcp.sh
-```
-
-### 2. QA 시나리오 생성
-
-```bash
-# Claude Code에서
-/qa-scenario
-```
-
-웹 폼이 열리면:
-1. 프로젝트 경로 입력 (BE/FE)
-2. 참조 문서 URL 입력 (Confluence, Swagger 등)
-3. 테스트 범위 선택
-4. "시나리오 생성 시작" 클릭
-
-### 3. 테스트 실행
-
-```bash
-# API 테스트
-/api-test
-
-# E2E 테스트
-/e2e-test
-```
-
-### 4. 자동 모드 (CI/CD 통합용)
-
-```bash
-# git diff 기반 자동 분석
-/qa-scenario --auto
-```
-
----
-
-## 설정
-
-### config.json 구조
-
-```json
-{
-  "run_id": "2026-01-09T14-30-52",
-  "project": {
-    "name": "my-project",
-    "type": "monorepo",
-    "fe_path": "/path/to/frontend",
-    "be_path": "/path/to/backend",
-    "framework": "vue2"
-  },
-  "target": {
-    "type": "full_project",
-    "features": [
-      {
-        "name": "login",
-        "routes": ["/login", "/auth/callback"],
-        "priority": "P0"
-      }
-    ]
-  },
-  "documents": {
-    "prd": ["https://confluence.example.com/pages/123"],
-    "api": ["https://api.example.com/swagger"],
-    "design": [],
-    "policy": []
-  },
-  "auth": {
-    "type": "keycloak",
-    "username": "test@example.com",
-    "password": "****"
-  },
-  "test_server": {
-    "fe_url": "https://dev.example.com",
-    "be_url": "https://api-dev.example.com"
-  }
-}
-```
-
-### 인증 설정
-
-```yaml
-auth.type 옵션:
-  - keycloak: Keycloak SSO (자동 로그인, OTP만 수동)
-  - jwt: JWT 토큰 직접 사용
-  - basic: Basic Auth
-  - none: 인증 없음
-```
-
----
-
-## E2E 테스트 자동화
-
-### 로그인 자동화
-
-`e2e_generate_code`로 생성되는 코드에는 자동 로그인이 포함됩니다:
-
-1. **저장된 인증 확인**: `playwright/.auth/user.json` 체크
-2. **만료/없으면 자동 로그인**: Keycloak 페이지 감지 → username/password 자동 입력
-3. **OTP만 수동**: 2분 대기 후 자동 진행
-4. **인증 상태 저장**: 다음 테스트에서 재사용
-
-### E2E 시나리오 액션 형식
-
-시나리오 문서에서 사용하는 액션 테이블:
-
-```markdown
-| # | 액션 | 설명 |
-|---|------|------|
-| 1 | navigate: /admin/menus | 페이지 이동 |
-| 2 | wait: [data-testid="table"] visible | 로딩 대기 |
-| 3 | click: [data-testid="add-btn"] | 버튼 클릭 |
-| 4 | fill: [data-testid="name"] -> "테스트" | 입력 |
-| 5 | select: [data-testid="type"] -> "옵션A" | 드롭다운 선택 |
-| 6 | assert: .toast-success visible | 검증 |
-| 7 | screenshot: after-save | 스크린샷 |
-```
-
----
-
-## 검증 체계
-
-### 파이프라인 검증
-
-| 단계 | 검증 도구 | 검증 항목 |
-|------|----------|----------|
-| 설정 | `qa_load_config` | 필수 필드, 경로 존재 |
-| 문서 수집 | `qa_verify_documents` | 수집 완료, 변환 품질 |
-| 시나리오 | `qa_verify_scenario` | 필수 섹션, TC 개수, 우선순위 |
-
-### 시나리오 검증 기준
-
-```yaml
-필수_섹션:
-  - 개요 (Overview)
-  - 참조 문서 (References)
-  - 테스트 시나리오 (Test Scenarios)
-
-TC_요구사항:
-  - 최소 5개 이상
-  - P0 (Critical) 최소 1개
-  - TC ID 형식: TC-{FEATURE}-{TYPE}-{NNN}
-
-실패시:
-  - step3-scenario-writer 재호출
-  - 누락 항목 보완 요청
-```
-
----
-
-## 트러블슈팅
-
-### MCP가 보이지 않음
-
-```bash
-# 모든 계정에 MCP 재등록
-cd ~/.claude/shared-agents
-./update-mcp.sh
-
-# Claude Code 재시작
-```
-
-### 인증 실패
-
-```bash
-# 저장된 인증 삭제 후 재로그인
-rm -rf {project}/playwright/.auth/
-```
-
-### 시나리오 검증 실패
-
-- TC 개수가 5개 미만인지 확인
-- P0 케이스가 있는지 확인
-- TC ID 형식이 올바른지 확인 (`TC-{FEATURE}-{TYPE}-{NNN}`)
-
----
-
-## 관련 문서
-
-- [MCP 공식 문서](https://modelcontextprotocol.io/)
-- [Playwright 문서](https://playwright.dev/)
-- [Atlassian MCP](https://mcp.atlassian.com/)
-
----
-
-## 변경 이력
-
-| 날짜 | 버전 | 변경 내용 |
+| 명령 | 설명 | 실행 방식 |
 |------|------|----------|
-| 2026-01-09 | 2.0 | run_id 폴더 방식, E2E 로그인 자동화, 전체 구조 리팩토링 |
-| 2026-01-08 | 1.0 | 초기 버전 |
+| `/qa-scenario` | QA 테스트 시나리오 생성 | qa-director → step1 → step1.5 → step2 → step3 |
+| `/qa-scenario --auto` | 질문 없이 자동 생성 | qa-director → step1 → step1.5 → step2 → step3 |
+| `/qa-scenario --from step2` | step2(코드 분석)부터 시작 | qa-director → step1.5 → step2 → step3 |
+| `/qa-scenario --from step3` | step3(시나리오 작성)만 실행 | qa-director → step3 |
+| `/e2e-test` | 전체 E2E 테스트 실행 | **메인 에이전트 직접 실행** |
+| `/e2e-test TC-001` | 특정 TC만 실행 | **메인 에이전트 직접 실행** |
+| `/e2e-test @MENU` | 특정 그룹만 실행 | **메인 에이전트 직접 실행** |
+| `/e2e-test --list` | TC 그룹 목록 조회 | 테스트 실행 안함 |
+| `/api-test` | API 테스트 실행 | qa-director → step4-backend-tester |
+| `/commit` | Git 커밋 생성 | 메인 에이전트 직접 실행 |
+| `/review-pr` | PR 리뷰 | 메인 에이전트 직접 실행 |
+
+### /e2e-test 옵션 상세
+
+```bash
+/e2e-test                    # 전체 TC 순차 실행 (기본)
+/e2e-test --list             # TC 그룹 목록 조회 (테스트 실행 안함)
+/e2e-test TC-AUTH-E2E-001    # 특정 TC만 실행
+/e2e-test TC-001~003         # TC-001부터 TC-003까지 실행
+/e2e-test @CORE              # CORE 그룹만 실행 (TC-CORE-E2E-*)
+/e2e-test @AUTH              # AUTH 그룹만 실행 (TC-AUTH-E2E-*)
+/e2e-test @CLIENT,MENU       # 여러 그룹 실행 (TC-CLIENT-E2E-*, TC-MENU-E2E-*)
+```
+
+---
+
+## 2.2 자연어 입력
+
+### 실행 방식 결정 규칙
+
+| 키워드 패턴 | 실행 방식 |
+|------------|----------|
+| E2E, 브라우저, UI 테스트 | **메인 에이전트 직접 실행** (Playwright MCP) |
+| API, 백엔드, 서버 테스트 | qa-director → step4-backend-tester |
+| 시나리오, QA, 테스트 케이스 | qa-director → step1 → step2 → step3 |
+
+### 자연어 → 그룹 변환
+
+| 자연어 | 그룹 코드 |
+|-------|----------|
+| "메뉴", "메뉴 관리" | @MENU |
+| "인증", "로그인" | @AUTH |
+| "클라이언트" | @CLIENT |
+| "핵심", "CORE" | @CORE |
+| "엣지", "예외" | @EDGE |
+
+### 자연어 요청 예시
+
+| 자연어 요청 | 변환 명령어 | 실행 방식 |
+|-------------|-------------|----------|
+| "E2E 테스트 해줘" | `/e2e-test` | 메인 에이전트 직접 실행 |
+| "메뉴 관리 E2E 테스트만" | `/e2e-test @MENU` | 메인 에이전트 직접 실행 |
+| "TC-001만 테스트해줘" | `/e2e-test TC-001` | 메인 에이전트 직접 실행 |
+| "API 테스트 실행해" | `/api-test` | qa-director → step4-backend-tester |
+| "QA 시나리오 만들어줘" | `/qa-scenario` | qa-director → step1 → step1.5 → step2 → step3 |
+| "코드 분석부터 다시 해줘" | `/qa-scenario --from step2` | qa-director → step1.5 → step2 → step3 |
+| "AUTH, CLIENT 테스트해줘" | `/e2e-test @AUTH,CLIENT` | 메인 에이전트 직접 실행 |
+
+### E2E 테스트 요청 시퀀스 (메인 에이전트 직접 실행)
+
+```
+┌─────────┐     ┌─────────────────────────────────────────────────────────────┐
+│  User   │     │                      Main Agent                             │
+└────┬────┘     └────────────────────────────┬────────────────────────────────┘
+     │                                       │
+     │ "메뉴 관리 E2E 테스트만 진행해줘"      │
+     │──────────────────────────────────────>│
+     │                                       │
+     │                                       │ ┌─────────────────────────────┐
+     │                                       │ │ 1. 키워드 분석               │
+     │                                       │ │    "E2E" → E2E 테스트       │
+     │                                       │ │    "메뉴 관리" → @MENU      │
+     │                                       │ │    변환: /e2e-test @MENU    │
+     │                                       │ └─────────────────────────────┘
+     │                                       │
+     │                                       │ ┌─────────────────────────────┐
+     │                                       │ │ 2. 실행 방식 결정            │
+     │                                       │ │    E2E 키워드 감지          │
+     │                                       │ │    → 메인 에이전트 직접 실행 │
+     │                                       │ │    (서브에이전트 호출 X)    │
+     │                                       │ └─────────────────────────────┘
+     │                                       │
+     │                                       │ ┌─────────────────────────────┐
+     │                                       │ │ 3. Playwright MCP 직접 호출 │
+     │                                       │ │    browser_navigate()       │
+     │                                       │ │    browser_click()          │
+     │                                       │ │    browser_type()           │
+     │                                       │ └─────────────────────────────┘
+     │                                       │
+     │   테스트 결과                          │
+     │<──────────────────────────────────────│
+     ▼                                       ▼
+```
+
+### QA 시나리오 요청 시퀀스 (qa-director 위임)
+
+```
+┌─────────┐     ┌─────────┐     ┌───────────┐     ┌───────────┐     ┌───────────┐
+│  User   │     │  Main   │     │qa-director│     │  step1    │     │  step2    │
+│         │     │  Agent  │     │           │     │doc-collect│     │code-analy │
+└────┬────┘     └────┬────┘     └─────┬─────┘     └─────┬─────┘     └─────┬─────┘
+     │               │                │                 │                 │
+     │ "QA 시나리오  │                │                 │                 │
+     │  만들어줘"    │                │                 │                 │
+     │──────────────>│                │                 │                 │
+     │               │                │                 │                 │
+     │               │ Task(qa-director)               │                 │
+     │               │───────────────>│                 │                 │
+     │               │                │                 │                 │
+     │               │                │ Task(step1)     │                 │
+     │               │                │────────────────>│                 │
+     │               │                │                 │ 문서 수집       │
+     │               │                │                 │────────────────>│
+     │               │                │                 │                 │
+     │               │                │ Task(step2)     │                 │
+     │               │                │────────────────────────────────>│
+     │               │                │                 │   코드 분석     │
+     │               │                │                 │                 │
+     │               │                │ Task(step3)     │                 │
+     │               │                │─────────────────│─────────────────│───>
+     │               │                │                 │  시나리오 작성  │
+     │               │                │                 │                 │
+     │   결과        │                │                 │                 │
+     │<──────────────│                │                 │                 │
+     ▼               ▼                ▼                 ▼                 ▼
+```
+
+---
+
+# 3. QA 시나리오 생성 (/qa-scenario)
+
+## 3.1 실행 흐름 (Sequence)
+
+```
+┌─────────┐     ┌─────────┐     ┌───────────┐     ┌───────────┐     ┌───────────┐     ┌───────────┐
+│  User   │     │  Main   │     │qa-director│     │  step1    │     │  step2    │     │  step3    │
+│         │     │  Agent  │     │           │     │doc-collect│     │code-analy │     │ scenario  │
+└────┬────┘     └────┬────┘     └─────┬─────┘     └─────┬─────┘     └─────┬─────┘     └─────┬─────┘
+     │               │                │                 │                 │                 │
+     │ /qa-scenario  │                │                 │                 │                 │
+     │──────────────>│                │                 │                 │                 │
+     │               │                │                 │                 │                 │
+     │               │ ─────────────────────────────────────────────────────────────────────────────
+     │               │  Step 0: 설정 로드
+     │               │ ─────────────────────────────────────────────────────────────────────────────
+     │               │                │                 │                 │                 │
+     │               │ Read config.json                 │                 │                 │
+     │               │───────────────────────────────────────────────────>│                 │
+     │               │               │                 │                 │                 │
+     │               │ Task(qa-director)               │                 │                 │
+     │               │───────────────>│                │                 │                 │
+     │               │                │                │                 │                 │
+     │               │                │ ─────────────────────────────────────────────────────────
+     │               │                │  Step 1: 문서 수집
+     │               │                │ ─────────────────────────────────────────────────────────
+     │               │                │                │                 │                 │
+     │               │                │ Task(step1)    │                 │                 │
+     │               │                │───────────────>│                 │                 │
+     │               │                │                │                 │                 │
+     │               │                │                │ qa_get_pending_documents         │
+     │               │                │                │─────────────────────────────────────────>
+     │               │                │                │                 │                 │
+     │               │                │                │ WebFetch        │                 │
+     │               │                │                │ (Confluence)    │                 │
+     │               │                │                │─────────────────────────────────────────>
+     │               │                │                │                 │                 │
+     │               │                │                │ format_markdown │                 │
+     │               │                │                │ (PRD 변환)     │                 │
+     │               │                │                │─────────────────────────────────────────>
+     │               │                │                │                 │                 │
+     │               │                │                │ Write           │                 │
+     │               │                │                │ references/*.md │                 │
+     │               │                │                │─────────────────────────────────────────>
+     │               │                │                │                 │                 │
+     │               │                │                │ 결과 반환       │                 │
+     │               │                │<───────────────│                 │                 │
+     │               │                │                │                 │                 │
+     │               │                │ ─────────────────────────────────────────────────────────
+     │               │                │  Step 2: 코드 분석
+     │               │                │ ─────────────────────────────────────────────────────────
+     │               │                │                │                 │                 │
+     │               │                │ Task(step2)    │                 │                 │
+     │               │                │────────────────────────────────>│                 │
+     │               │                │                │                 │                 │
+     │               │                │                │                 │ Glob, Grep, Read│
+     │               │                │                │                 │ (BE/FE 분석)   │
+     │               │                │                │                 │─────────────────────>
+     │               │                │                │                 │                 │
+     │               │                │                │                 │ Write           │
+     │               │                │                │                 │ analysis/*.md   │
+     │               │                │                │                 │─────────────────────>
+     │               │                │                │                 │                 │
+     │               │                │                │                 │ 결과 반환       │
+     │               │                │<────────────────────────────────│                 │
+     │               │                │                │                 │                 │
+     │               │                │ ─────────────────────────────────────────────────────────
+     │               │                │  Step 3: 시나리오 작성
+     │               │                │ ─────────────────────────────────────────────────────────
+     │               │                │                │                 │                 │
+     │               │                │ Task(step3)    │                 │                 │
+     │               │                │─────────────────────────────────────────────────>│
+     │               │                │                │                 │                 │
+     │               │                │                │                 │                 │ Read
+     │               │                │                │                 │                 │ references/
+     │               │                │                │                 │                 │ analysis/
+     │               │                │                │                 │                 │────────>
+     │               │                │                │                 │                 │
+     │               │                │                │                 │                 │ Write
+     │               │                │                │                 │                 │ scenarios/
+     │               │                │                │                 │                 │────────>
+     │               │                │                │                 │                 │
+     │               │                │                │                 │                 │ 결과 반환
+     │               │                │<─────────────────────────────────────────────────│
+     │               │                │                │                 │                 │
+     │               │                │ 파이프라인 완료│                 │                 │
+     │               │<───────────────│                │                 │                 │
+     │               │                │                │                 │                 │
+     │  시나리오     │                │                 │                 │                 │
+     │  생성 완료    │                │                 │                 │                 │
+     │<──────────────│                │                 │                 │                 │
+     │               │                │                │                 │                 │
+     ▼               ▼                ▼                ▼                 ▼                 ▼
+```
+
+### --from 옵션 사용 시 흐름
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  /qa-scenario --from 옵션별 실행 범위                                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  /qa-scenario (기본)                                                        │
+│  ├── Step 1: 문서 수집         ✓                                           │
+│  ├── Step 1.5: 프로젝트 구조   ✓  ⭐                                        │
+│  ├── Step 2: 코드 분석         ✓                                           │
+│  └── Step 3: 시나리오 작성     ✓                                           │
+│                                                                             │
+│  /qa-scenario --from step2                                                  │
+│  ├── Step 1: 문서 수집         ✗ (SKIP - 기존 문서 사용)                    │
+│  ├── Step 1.5: 프로젝트 구조   ✓  ⭐ (빌드파일 재분석)                       │
+│  ├── Step 2: 코드 분석         ✓                                           │
+│  └── Step 3: 시나리오 작성     ✓                                           │
+│                                                                             │
+│  /qa-scenario --from step3                                                  │
+│  ├── Step 1: 문서 수집         ✗ (SKIP - 기존 문서 사용)                    │
+│  ├── Step 1.5: 프로젝트 구조   ✗ (SKIP - 기존 구조 사용)                    │
+│  ├── Step 2: 코드 분석         ✗ (SKIP - 기존 분석 사용)                    │
+│  └── Step 3: 시나리오 작성     ✓                                           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 3.2 파이프라인 상세
+
+### Step 1: 문서 수집
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Step 1: 문서 수집 (step1-doc-collector)                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐       │
+│  │  config.json    │     │ step1-doc-      │     │ references/     │       │
+│  │  documents URL  │────>│   collector     │────>│   *.md          │       │
+│  └─────────────────┘     └────────┬────────┘     └─────────────────┘       │
+│                                   │                                         │
+│  처리 흐름:                        │                                         │
+│  1. qa_get_pending_documents()    │                                         │
+│     → 수집 대상 URL 목록 조회      │                                         │
+│                                   │                                         │
+│  2. 문서 유형별 MCP 도구 호출:     │                                         │
+│     ├── Confluence → mcp__atlassian__getConfluencePage                     │
+│     ├── Swagger    → WebFetch + swagger_load                               │
+│     ├── PDF        → mcp__doc-converter__convert_pdf_to_md                 │
+│     └── DOCX       → mcp__doc-converter__convert_docx_to_md                │
+│                                   │                                         │
+│  3. format_markdown() → 정제      │                                         │
+│  4. Write → references/ 저장      │                                         │
+│  5. qa_mark_document_collected()  │                                         │
+│                                                                             │
+│  출력:                                                                      │
+│  ├── prd/           # PRD 문서                                             │
+│  ├── api/           # API 명세서                                           │
+│  ├── policy/        # 정책 문서                                            │
+│  └── index.md       # 참조 문서 인덱스                                     │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Step 1.5: 프로젝트 구조 분석 (NEW)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Step 1.5: 프로젝트 구조 분석 (step1.5-project-detector)  ⭐                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐       │
+│  │  config.json    │     │ step1.5-project-│     │ analysis/       │       │
+│  │  be_path/fe_path│────>│   detector      │────>│ project-        │       │
+│  └─────────────────┘     └────────┬────────┘     │  structure.json │       │
+│                                   │              └─────────────────┘       │
+│  ⚡ BE/FE 병렬 처리:               │                                         │
+│  ┌─────────────────────┐ ┌─────────────────────┐                           │
+│  │ BE 감지 (parallel)  │ │ FE 감지 (parallel)  │                           │
+│  ├─────────────────────┤ ├─────────────────────┤                           │
+│  │ build.gradle(.kts)  │ │ package.json        │                           │
+│  │ pom.xml             │ │ angular.json        │                           │
+│  │ requirements.txt    │ │ nuxt.config.ts      │                           │
+│  │ go.mod              │ │ vite.config.ts      │                           │
+│  │ Cargo.toml          │ │ next.config.js      │                           │
+│  └─────────────────────┘ └─────────────────────┘                           │
+│                                   │                                         │
+│  동적 패턴 생성:                   │                                         │
+│  ├── 코드 패턴 검색 (@RestController, @Service, router.get 등)             │
+│  ├── 실제 파일 위치에서 glob 패턴 추출                                      │
+│  └── step2에서 사용할 분석 패턴 저장                                        │
+│                                   │                                         │
+│  출력 예시:                        │                                         │
+│  {                                │                                         │
+│    "be": {                        │                                         │
+│      "framework": "spring-boot",  │                                         │
+│      "patterns": {                │                                         │
+│        "controller": "**/controller/**/*.kt",                              │
+│        "service": "**/service/**/*.kt"                                     │
+│      }                            │                                         │
+│    },                             │                                         │
+│    "fe": {                        │                                         │
+│      "framework": "vue3",         │                                         │
+│      "patterns": {                │                                         │
+│        "pages": "**/pages/**/*.vue",                                       │
+│        "components": "**/components/**/*.vue"                              │
+│      }                            │                                         │
+│    }                              │                                         │
+│  }                                │                                         │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Step 2: 코드 분석
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Step 2: 코드 분석 (step2-code-analyzer)                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐       │
+│  │  BE 프로젝트    │     │ step2-code-     │     │ analysis/       │       │
+│  │  FE 프로젝트    │────>│   analyzer      │────>│   *.md          │       │
+│  └─────────────────┘     └────────┬────────┘     └─────────────────┘       │
+│                                   │                                         │
+│  BE 분석:                          │                                         │
+│  ├── Glob: **/*Controller.java    │                                         │
+│  ├── Grep: @RequestMapping, @GetMapping, @PostMapping                      │
+│  ├── Read: 컨트롤러 파일 내용      │                                         │
+│  └── 추출: 엔드포인트, DTO, 응답 스키마                                     │
+│                                   │                                         │
+│  FE 분석:                          │                                         │
+│  ├── Glob: **/*.vue, **/router/**  │                                         │
+│  ├── Grep: router.push, axios, fetch                                       │
+│  ├── Read: 라우터, 컴포넌트 파일   │                                         │
+│  └── 추출: 라우트, API 호출, 컴포넌트 구조                                  │
+│                                   │                                         │
+│  ⭐ E2E 디테일 분석 (NEW):         │                                         │
+│  ├── user_journeys: 사용자 플로우 (페이지 간 이동)                          │
+│  ├── data_dependencies: 엔티티 의존성 (FK 관계)                             │
+│  ├── confirmation_dialogs: 확인 다이얼로그 (삭제 확인 등)                   │
+│  ├── ui_components: 체크박스, 토글, 테이블, 모달 상세                       │
+│  └── loadingStates, toasts: 로딩/알림 상태                                  │
+│                                   │                                         │
+│  출력:                             │                                         │
+│  ├── be-analysis.md              │                                         │
+│  ├── fe-analysis.md              │                                         │
+│  └── test-targets.json           │                                         │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Step 3: 시나리오 작성
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Step 3: 시나리오 작성 (step3-scenario-writer)                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐       │
+│  │  references/    │     │ step3-scenario- │     │ scenarios/      │       │
+│  │  analysis/      │────>│     writer      │────>│   *.md          │       │
+│  └─────────────────┘     └────────┬────────┘     └─────────────────┘       │
+│                                   │                                         │
+│  입력 로드:                        │                                         │
+│  ├── qa_load_scenario_inputs()   │                                         │
+│  ├── PRD 문서 (기능 요구사항)     │                                         │
+│  ├── API 명세서 (엔드포인트)       │                                         │
+│  ├── BE 분석 (컨트롤러, DTO)      │                                         │
+│  └── FE 분석 (라우트, 컴포넌트)    │                                         │
+│                                   │                                         │
+│  시나리오 생성:                    │                                         │
+│  ├── 우선순위 분류 (P0~P3)        │                                         │
+│  ├── TC ID 생성 (TC-{GROUP}-E2E-{번호})                                    │
+│  ├── 상세 스텝 정의               │                                         │
+│  ├── 예상 결과 및 검증 조건        │                                         │
+│  │                                │                                         │
+│  ├── ⭐ E2E 플로우 시나리오 (user_journeys 활용)                            │
+│  ├── ⭐ 데이터 의존성 시나리오 (data_dependencies 활용)                     │
+│  └── ⭐ 다이얼로그 시나리오 (confirmation_dialogs 활용)                     │
+│                                   │                                         │
+│  출력:                             │                                         │
+│  ├── e2e-scenarios.md            │                                         │
+│  ├── api-scenarios.md            │                                         │
+│  └── edge-cases.md               │                                         │
+│                                   │                                         │
+│  검증:                             │                                         │
+│  └── qa_verify_scenario()        │                                         │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+# 4. E2E 테스트 실행 (/e2e-test)
+
+## 4.1 실행 흐름 (Sequence)
+
+```
+┌─────────┐     ┌─────────┐     ┌──────────┐     ┌──────────┐     ┌─────────┐
+│  User   │     │  Main   │     │Dashboard │     │Playwright│     │  User   │
+│         │     │  Agent  │     │ :3847    │     │   MCP    │     │(Browser)│
+└────┬────┘     └────┬────┘     └────┬─────┘     └────┬─────┘     └────┬────┘
+     │               │               │                │                │
+     │ /e2e-test     │               │                │                │
+     │ @MENU         │               │                │                │
+     │──────────────>│               │                │                │
+     │               │               │                │                │
+     │               │ ─────────────────────────────────────────────────────
+     │               │  Step 0: 환경 준비
+     │               │ ─────────────────────────────────────────────────────
+     │               │               │                │                │
+     │               │ Read config.json               │                │
+     │               │───────────────────────────────>│                │
+     │               │               │                │                │
+     │               │ start.sh      │                │                │
+     │               │──────────────>│                │                │
+     │               │               │ 시나리오 로드  │                │
+     │               │               │────────────────│                │
+     │               │               │                │                │
+     │               │ e2e_check_auth│                │                │
+     │               │───────────────────────────────>│                │
+     │               │               │   valid: false │                │
+     │               │<──────────────────────────────│                │
+     │               │               │                │                │
+     │               │ ─────────────────────────────────────────────────────
+     │               │  Step 1: 로그인 (필요 시)
+     │               │ ─────────────────────────────────────────────────────
+     │               │               │                │                │
+     │               │               │ browser_navigate(TEST_URL)      │
+     │               │               │───────────────>│───────────────>│
+     │               │               │                │    Keycloak    │
+     │               │               │                │    로그인 화면 │
+     │               │               │                │<───────────────│
+     │               │               │ browser_type   │                │
+     │               │               │ (username)     │                │
+     │               │               │───────────────>│───────────────>│
+     │               │               │                │                │
+     │               │               │ browser_type   │                │
+     │               │               │ (password)     │                │
+     │               │               │───────────────>│───────────────>│
+     │               │               │                │                │
+     │               │               │ browser_click  │                │
+     │               │               │ (로그인)       │                │
+     │               │               │───────────────>│───────────────>│
+     │               │               │                │   OTP 화면     │
+     │               │               │                │<───────────────│
+     │               │               │                │                │
+     │  OTP 입력 요청│               │                │                │
+     │<──────────────│               │                │                │
+     │  "123456"     │               │                │                │
+     │──────────────>│               │                │                │
+     │               │               │                │                │
+     │               │ ─────────────────────────────────────────────────────
+     │               │  Step 2: TC 순차 실행
+     │               │ ─────────────────────────────────────────────────────
+     │               │               │                │                │
+     │               │ POST /tc/start│                │                │
+     │               │ TC-MENU-001   │                │                │
+     │               │──────────────>│                │                │
+     │               │               │                │                │
+     │               │               │ browser_navigate(/adminMenu)    │
+     │               │               │───────────────>│───────────────>│
+     │               │               │                │                │
+     │               │ POST /tc/step │                │                │
+     │               │ step:0 passed │                │                │
+     │               │──────────────>│                │                │
+     │               │               │                │                │
+     │               │               │ browser_click  │                │
+     │               │               │ (클라이언트)   │                │
+     │               │               │───────────────>│───────────────>│
+     │               │               │                │                │
+     │               │ POST /tc/step │                │                │
+     │               │ step:1 passed │                │                │
+     │               │──────────────>│                │                │
+     │               │               │                │                │
+     │               │ POST /tc/complete              │                │
+     │               │ TC-MENU-001   │                │                │
+     │               │ passed        │                │                │
+     │               │──────────────>│                │                │
+     │               │               │                │                │
+     │               │    ... (다음 TC 반복) ...      │                │
+     │               │               │                │                │
+     │               │ ─────────────────────────────────────────────────────
+     │               │  Step 3: 결과 리포트 생성
+     │               │ ─────────────────────────────────────────────────────
+     │               │               │                │                │
+     │               │ e2e_create_report              │                │
+     │               │───────────────────────────────>│                │
+     │               │               │                │                │
+     │   결과 요약   │               │                │                │
+     │<──────────────│               │                │                │
+     │               │               │                │                │
+     ▼               ▼               ▼                ▼                ▼
+```
+
+---
+
+## 4.2 Playwright MCP 동작 원리
+
+시나리오의 액션 설명을 기반으로 Playwright MCP가 어떻게 요소를 찾고 조작하는지 보여줍니다.
+
+### 핵심 개념: Snapshot → ref 매칭 → 액션
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  시나리오 액션 처리 흐름                                                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. Snapshot 요청                                                           │
+│     browser_snapshot() → Accessibility Tree 반환                            │
+│                                                                             │
+│  2. 요소 매칭 (시나리오 설명 → ref 찾기)                                     │
+│     ┌─────────────────────────────────────────────────────────────────┐    │
+│     │  시나리오: "등록" 버튼 클릭                                       │    │
+│     │                    ↓                                             │    │
+│     │  Snapshot 검색: button 중 name="등록" 찾기                       │    │
+│     │                    ↓                                             │    │
+│     │  결과: ref="e3f2"                                                │    │
+│     └─────────────────────────────────────────────────────────────────┘    │
+│                                                                             │
+│  3. 액션 실행 (ref 기반)                                                    │
+│     browser_click(element="등록 버튼", ref="e3f2")                         │
+│                                                                             │
+│  4. 결과 확인 (새 Snapshot으로 UI 변화 검증)                                │
+│     browser_snapshot() → 팝업 열림 확인                                    │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 버튼 클릭 시퀀스
+
+```
+┌─────────────────────┐     ┌─────────────────────┐     ┌─────────────────────┐
+│  시나리오 (설명)     │     │   Main Agent        │     │   Playwright MCP    │
+│                     │     │   (E2E Tester)      │     │                     │
+└──────────┬──────────┘     └──────────┬──────────┘     └──────────┬──────────┘
+           │                           │                           │
+           │  "등록" 버튼 클릭          │                           │
+           │  (테이블 상단 우측)        │                           │
+           │ ─────────────────────────>│                           │
+           │                           │                           │
+           │                           │ ─────────────────────────────────────
+           │                           │  Step 1: 페이지 상태 캡처 (Snapshot)
+           │                           │ ─────────────────────────────────────
+           │                           │                           │
+           │                           │   browser_snapshot()      │
+           │                           │ ─────────────────────────>│
+           │                           │                           │
+           │                           │   Accessibility Tree 반환 │
+           │                           │   ┌─────────────────────┐ │
+           │                           │   │ [ref="e3f2"] button │ │
+           │                           │   │ name: "등록"        │ │
+           │                           │   │                     │ │
+           │                           │   │ [ref="a1b2"] input  │ │
+           │                           │   │ name: "이름"        │ │
+           │                           │   │ ...                 │ │
+           │                           │   └─────────────────────┘ │
+           │                           │ <─────────────────────────│
+           │                           │                           │
+           │                           │ ─────────────────────────────────────
+           │                           │  Step 2: 요소 매칭 (시나리오 설명 → ref)
+           │                           │ ─────────────────────────────────────
+           │                           │                           │
+           │                           │   시나리오: "등록" 버튼   │
+           │                           │   ↓ 매칭                  │
+           │                           │   Snapshot: button "등록" │
+           │                           │   ↓ 결과                  │
+           │                           │   ref = "e3f2"            │
+           │                           │                           │
+           │                           │ ─────────────────────────────────────
+           │                           │  Step 3: 액션 실행 (ref 기반)
+           │                           │ ─────────────────────────────────────
+           │                           │                           │
+           │                           │   browser_click(          │
+           │                           │     element="등록 버튼",   │
+           │                           │     ref="e3f2"            │
+           │                           │   )                       │
+           │                           │ ─────────────────────────>│
+           │                           │                           │
+           │                           │   클릭 완료 + 새 Page State
+           │                           │ <─────────────────────────│
+           │                           │                           │
+           ▼                           ▼                           ▼
+```
+
+### 텍스트 입력 시퀀스
+
+```
+┌─────────────────────┐     ┌─────────────────────┐     ┌─────────────────────┐
+│  시나리오 (설명)     │     │   Main Agent        │     │   Playwright MCP    │
+└──────────┬──────────┘     └──────────┬──────────┘     └──────────┬──────────┘
+           │                           │                           │
+           │  "이름" 필드에            │                           │
+           │  "[E2E] 테스트" 입력      │                           │
+           │ ─────────────────────────>│                           │
+           │                           │                           │
+           │                           │   browser_snapshot()      │
+           │                           │ ─────────────────────────>│
+           │                           │                           │
+           │                           │   Accessibility Tree      │
+           │                           │   [ref="x7y8"] textbox    │
+           │                           │   name: "이름"            │
+           │                           │ <─────────────────────────│
+           │                           │                           │
+           │                           │   매칭: "이름" 필드 =     │
+           │                           │         ref="x7y8"        │
+           │                           │                           │
+           │                           │   browser_type(           │
+           │                           │     element="이름 필드",   │
+           │                           │     ref="x7y8",           │
+           │                           │     text="[E2E] 테스트"   │
+           │                           │   )                       │
+           │                           │ ─────────────────────────>│
+           │                           │                           │
+           │                           │   입력 완료               │
+           │                           │ <─────────────────────────│
+           │                           │                           │
+           ▼                           ▼                           ▼
+```
+
+### Playwright MCP 주요 도구
+
+| 도구 | 용도 | 예시 |
+|------|------|------|
+| `browser_snapshot()` | 페이지 상태 캡처, ref 획득 | 모든 액션 전 호출 |
+| `browser_click(element, ref)` | 요소 클릭 | 버튼, 링크, 체크박스 |
+| `browser_type(element, ref, text)` | 텍스트 입력 | input, textarea |
+| `browser_navigate(url)` | URL 이동 | 페이지 전환 |
+| `browser_select_option(element, ref, values)` | 드롭다운 선택 | select 요소 |
+| `browser_take_screenshot()` | 스크린샷 저장 | 결과 기록 |
+
+---
+
+## 4.3 대시보드 동기화
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         Dashboard Sync Flow                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────┐         ┌─────────────────┐         ┌─────────────────┐
+│   E2E Tester    │ ──────▶ │   Dashboard     │ ──────▶ │   브라우저 UI   │
+│                 │  HTTP   │   Server        │  WS     │                 │
+│ - TC 시작/완료  │  POST   │ localhost:3847  │         │ - 실시간 진행  │
+│ - 스텝 업데이트 │         │                 │         │ - 결과 차트    │
+└─────────────────┘         └─────────────────┘         └─────────────────┘
+```
+
+### API 엔드포인트
+
+| 엔드포인트 | 설명 |
+|-----------|------|
+| `POST /api/load-scenarios` | 시나리오 로드 |
+| `POST /api/tc/start` | TC 시작 |
+| `POST /api/tc/step` | 스텝 완료 |
+| `POST /api/tc/complete` | TC 완료 |
+| `POST /api/reset` | 상태 초기화 |
+
+### sync.sh 헬퍼
+
+```bash
+$SYNC start "TC-001" "테스트명"    # TC 시작
+$SYNC step "TC-001" 0 "passed"     # 스텝 완료
+$SYNC complete "TC-001" "passed"   # TC 완료
+$SYNC reset                         # 초기화
+```
+
+---
+
+## 4.4 TC 그룹핑 규칙
+
+### TC ID 네이밍 컨벤션
+
+```
+TC-{GROUP}-E2E-{번호}
+
+예시:
+├── TC-AUTH-E2E-001   → AUTH 그룹 (인증)
+├── TC-MENU-E2E-001   → MENU 그룹 (메뉴 관리)
+├── TC-CLIENT-E2E-001 → CLIENT 그룹 (클라이언트)
+├── TC-UMA-E2E-001    → UMA 그룹 (UMA 클라이언트)
+├── TC-CORE-E2E-001   → CORE 그룹 (핵심 기능)
+└── TC-EDGE-E2E-001   → EDGE 그룹 (엣지 케이스)
+```
+
+### 그룹 필터링
+
+```bash
+# 단일 그룹
+/e2e-test @AUTH          # TC-AUTH-E2E-* 만 실행
+
+# 복수 그룹
+/e2e-test @AUTH,CLIENT   # TC-AUTH-E2E-*, TC-CLIENT-E2E-* 실행
+
+# 대소문자 구분 없음
+/e2e-test @auth          # @AUTH와 동일
+/e2e-test @Auth          # @AUTH와 동일
+```
+
+---
+
+# 5. 참조
+
+## 5.1 사전 조건
+
+### /qa-scenario 실행 전
+
+- BE/FE 프로젝트 경로 확인
+- Confluence/Swagger 문서 URL 준비
+- 테스트 서버 URL 확인
+
+### /e2e-test 실행 전
+
+1. `/qa-scenario`로 시나리오 생성 완료
+2. 테스트 서버 실행 중
+3. `docs/qa/latest/config.json` 존재
+
+### /api-test 실행 전
+
+1. `/qa-scenario`로 시나리오 생성 완료
+2. `docs/qa/latest/scenarios/*api*.md` 시나리오 존재
+3. 테스트 대상 API 서버 실행 중
+
+---
+
+## 5.2 주의사항
+
+### 테스트 데이터 관리
+
+- **생성 데이터**: `[E2E]` 또는 `[e2e]` prefix 사용
+- **삭제 범위**: 테스트에서 생성한 데이터만 삭제
+- **운영 데이터**: 절대 수정/삭제하지 않음
+
+### 인증 처리
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  인증 플로우                                                     │
+├─────────────────────────────────────────────────────────────────┤
+│  1. e2e_check_auth(project_path) 호출                            │
+│                                                                  │
+│  2. 결과에 따른 분기:                                            │
+│     ┌─────────────────┬────────────────────────────────────┐    │
+│     │ valid: true     │ → 인증 재사용 (로그인 SKIP)         │    │
+│     ├─────────────────┼────────────────────────────────────┤    │
+│     │ valid: false    │ → 새로 로그인 필요                  │    │
+│     │                 │   로그인 → OTP(수동) → 저장         │    │
+│     └─────────────────┴────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 선택자 (Selectors)
+
+| 요소 | 선택자 |
+|------|--------|
+| 테이블 | `.vs-table` |
+| 버튼 | `.vs-button`, `button` |
+| 입력 필드 | `input[name='...']` |
+| 선택 필드 | `select.native-select` |
+| 팝업 | `.vs-popup-content` |
+| 알림 | `.vs-notification` |
+
+---
+
+## 5.3 테스트 결과 예시
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           Test Results Summary                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────┬────────┬────────┬────────┬────────┐
+│ 카테고리              │ Total  │  Pass  │  Fail  │  Skip  │
+├──────────────────────┼────────┼────────┼────────┼────────┤
+│ AUTH (인증)          │    3   │    3   │    0   │    0   │
+│ MENU (메뉴 관리)     │   10   │    8   │    0   │    2   │
+│ CLIENT (클라이언트)  │    7   │    7   │    0   │    0   │
+│ UMA (UMA 클라이언트) │    5   │    5   │    0   │    0   │
+│ EDGE (엣지 케이스)   │   12   │   10   │    1   │    1   │
+├──────────────────────┼────────┼────────┼────────┼────────┤
+│ Total                │   37   │   33   │    1   │    3   │
+└──────────────────────┴────────┴────────┴────────┴────────┘
+
+Success Rate: 97.1% (33/34 executed)
+```
+
+---
+
+**마지막 업데이트**: 2026-01-14

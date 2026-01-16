@@ -250,14 +250,21 @@ MCP_ALLOWED_TOOLS=(
     "Bash(cat:*)"
     "Bash(cat >:*)"
     "Bash(chmod:*)"
-
+    # 재미나이 cli 자동승인
+    "Bash(gemini:*)"
     # Claude Code 서브에이전트 자동 승인
     "Bash(claude-code task:*)"
+    # MCP task 명령 자동승인
+    "Bash(mcp task:*)"
 
-    # QA E2E 대시보드 동기화 (sync.sh)
+    # QA E2E 대시보드
+    "Bash(*/e2e-dashboard/start.sh:*)"
+    "Bash(*/e2e-dashboard/sync.sh:*)"
+    "Bash(./sync.sh:*)"
     "Bash(SYNC=*)"
     "Bash(\$SYNC:*)"
     "Bash(curl:*)"
+    "Bash(python3:*)"
 
     # 프로세스 관리
     "Bash(lsof:*)"
@@ -489,7 +496,32 @@ if [ -n "$PROJECT_PATH" ]; then
         [ -d "$SHARED_DIR/standards" ] && setup_project_resource "standards" "$SHARED_DIR/standards" "$PROJECT_PATH/.claude/standards" "dir"
         [ -f "$SHARED_DIR/RULES.md" ] && setup_project_resource "RULES.md" "$SHARED_DIR/RULES.md" "$PROJECT_PATH/.claude/RULES.md" "file"
 
-        # settings.local.json 생성
+        # hooks 디렉토리 복사 (task-tracker 자동화)
+        HOOKS_TEMPLATE="$SHARED_DIR/templates/.claude/hooks"
+        if [ -d "$HOOKS_TEMPLATE" ]; then
+            mkdir -p "$PROJECT_PATH/.claude/hooks"
+            cp -r "$HOOKS_TEMPLATE"/* "$PROJECT_PATH/.claude/hooks/"
+            chmod +x "$PROJECT_PATH/.claude/hooks"/*.sh 2>/dev/null || true
+            echo -e "       ${GREEN}✓${NC} hooks configured (task-tracker)"
+        fi
+
+        # settings.json에 hooks 설정 추가
+        PROJECT_SETTINGS_JSON="$PROJECT_PATH/.claude/settings.json"
+        HOOKS_SETTINGS="$SHARED_DIR/templates/.claude/settings.json"
+        if [ -f "$HOOKS_SETTINGS" ]; then
+            if [ ! -f "$PROJECT_SETTINGS_JSON" ]; then
+                cp "$HOOKS_SETTINGS" "$PROJECT_SETTINGS_JSON"
+                echo -e "       ${GREEN}✓${NC} settings.json created with hooks"
+            elif command -v jq &> /dev/null; then
+                # 기존 설정과 hooks 설정 병합
+                HOOKS_JSON=$(cat "$HOOKS_SETTINGS")
+                UPDATED=$(jq -s '.[0] * .[1]' "$PROJECT_SETTINGS_JSON" <(echo "$HOOKS_JSON"))
+                echo "$UPDATED" > "$PROJECT_SETTINGS_JSON"
+                echo -e "       ${GREEN}✓${NC} settings.json merged with hooks"
+            fi
+        fi
+
+        # settings.local.json 생성 (MCP 권한)
         PROJECT_SETTINGS="$PROJECT_PATH/.claude/settings.local.json"
         if [ ! -f "$PROJECT_SETTINGS" ]; then
             echo '{}' > "$PROJECT_SETTINGS"

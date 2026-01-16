@@ -539,6 +539,118 @@ FE_파싱_로직:
           confirmBtn: "확인"
           cancelBtn: "취소"
           testScenarios: ["확인 → 삭제", "취소 → 유지", "ESC → 유지"]
+
+  ################################################################################
+  # ⭐⭐⭐ 비즈니스 규칙 및 테스트 확장 데이터 추출 (NEW - TC 다양성 강화)
+  ################################################################################
+
+  비즈니스_규칙_추출:
+    패턴_BE: "**/service/**/*.kt", "**/service/**/*.java", "**/domain/**/*.kt"
+    패턴_FE: "**/utils/**/*.js", "**/helpers/**/*.js", "**/validators/**/*.js"
+    추출_대상:
+      - if/when 조건문 (조건부 로직)
+      - throw/error 발생 조건
+      - 필드 간 의존성 (A 값에 따라 B 필수)
+      - 삭제/수정 제약 조건
+    검색_패턴:
+      - 'if.*throw'
+      - 'when.*IllegalArgument'
+      - 'require.*{'
+      - '.isNullOrEmpty.*throw'
+      - 'validate.*Rule'
+    예시_출력:
+      - name: "메뉴 타입별 URL 필수"
+        rule: "ITEM 타입이면 URL 필수"
+        source: "MenuService.kt:45"
+        conditions: [{when: "type==GROUP", then: "url 선택"}, {when: "type==ITEM", then: "url 필수"}]
+
+  상태_전이_추출:
+    패턴_BE: "**/service/**/*.kt", "**/domain/**/*.kt"
+    패턴_FE: "**/*.vue", "**/store/**/*.js"
+    추출_대상:
+      - 상태 필드 (xxxYn, status, state)
+      - 상태 변경 메서드
+      - 상태별 제약/허용 동작
+      - 상태 변경 시 사이드이펙트
+    검색_패턴:
+      - '.*Yn.*='
+      - 'status.*='
+      - 'activate|deactivate'
+      - 'enable|disable'
+      - '@Transactional.*update.*Status'
+    분석_포인트:
+      - 어떤 상태에서 어떤 상태로 전이 가능?
+      - 전이 시 확인 다이얼로그 필요?
+      - 전이 시 연쇄 동작 (cascade)?
+    예시_출력:
+      - entity: "Client"
+        field: "activityYn"
+        transitions: [{from: "active", to: "inactive", confirm: true, cascade: ["logout users"]}]
+
+  권한_체크_추출:
+    패턴_BE: "**/security/**/*.kt", "**/config/**Security*.kt", "**/annotation/**/*.kt"
+    패턴_FE: "**/router/**/*.js", "**/guard/**/*.js", "**/directive/**/*.js"
+    추출_대상:
+      - 역할 정의 (ADMIN, OPERATOR, VIEWER 등)
+      - 리소스별 권한 매핑
+      - UI 요소별 권한 제한
+    검색_패턴:
+      - '@PreAuthorize'
+      - '@Secured'
+      - 'hasRole'
+      - 'hasAuthority'
+      - 'v-if.*role'
+      - 'permission.*check'
+    예시_출력:
+      roles: ["ADMIN", "OPERATOR", "VIEWER"]
+      resources:
+        - name: "Client"
+          CREATE: ["ADMIN"]
+          READ: ["ADMIN", "OPERATOR", "VIEWER"]
+          UPDATE: ["ADMIN", "OPERATOR"]
+          DELETE: ["ADMIN"]
+
+  에러_시나리오_추출:
+    패턴_BE: "**/exception/**/*.kt", "**/error/**/*.kt", "**/handler/**Exception*.kt"
+    패턴_FE: "**/api/**/*.js", "**/utils/error*.js"
+    추출_대상:
+      - 에러 코드 정의
+      - HTTP 상태 코드 매핑
+      - 에러 메시지 템플릿
+      - 에러 발생 조건
+    검색_패턴:
+      - 'HttpStatus\.'
+      - 'ErrorCode\.'
+      - 'throw.*Exception'
+      - 'catch.*error'
+      - '$message.*error'
+    예시_출력:
+      - category: "validation"
+        errors: [{code: "REQUIRED", message: "{field} 입력 필요", status: 400}]
+      - category: "business"
+        errors: [{code: "HAS_CHILDREN", message: "하위 데이터 존재", status: 400}]
+
+  경계값_추출:
+    패턴_BE: "**/dto/**/*.kt", "**/entity/**/*.kt", "**/validation/**/*.kt"
+    패턴_FE: "**/validators/**/*.js", "**/constants/**/*.js"
+    추출_대상:
+      - 필드 길이 제한 (min, max)
+      - 숫자 범위 제한
+      - 패턴 제약 (정규식)
+      - 필수/선택 여부
+    검색_패턴:
+      - '@Size'
+      - '@Min.*@Max'
+      - '@Pattern'
+      - '@NotNull'
+      - '@NotBlank'
+      - 'maxLength'
+      - 'minLength'
+    예시_출력:
+      - field: "name"
+        type: "string"
+        constraints: {minLength: 1, maxLength: 100}
+        testValues: {valid: ["A", "정상값"], invalid: ["", "A"*101], edge: ["A", "A"*100]}
 ```
 
 ### React
@@ -1040,6 +1152,197 @@ Framework: {framework}
         "확인 → 변경사항 버리고 이동",
         "취소 → 현재 페이지 유지"
       ]
+    }
+  ],
+
+  "business_rules": [
+    {
+      "name": "메뉴 타입별 필수값",
+      "category": "validation",
+      "source": "MenuService.kt:45",
+      "rule": "menuType이 ITEM일 때 url 필수",
+      "conditions": [
+        { "when": "menuType == 'GROUP'", "then": "url은 선택" },
+        { "when": "menuType == 'ITEM'", "then": "url 필수, /로 시작" }
+      ],
+      "testScenarios": [
+        "GROUP 타입 + URL 없음 → 성공",
+        "ITEM 타입 + URL 없음 → 에러",
+        "ITEM 타입 + 유효한 URL → 성공",
+        "ITEM 타입 + 잘못된 URL 형식 → 에러"
+      ]
+    },
+    {
+      "name": "클라이언트 삭제 제약",
+      "category": "constraint",
+      "source": "ClientService.kt:112",
+      "rule": "하위 메뉴가 있으면 클라이언트 삭제 불가",
+      "conditions": [
+        { "when": "client.menus.length > 0", "then": "삭제 불가, 에러 반환" },
+        { "when": "client.menus.length == 0", "then": "삭제 가능" }
+      ],
+      "testScenarios": [
+        "하위 메뉴 없는 클라이언트 삭제 → 성공",
+        "하위 메뉴 있는 클라이언트 삭제 → 에러 메시지",
+        "하위 메뉴 모두 삭제 후 클라이언트 삭제 → 성공"
+      ]
+    }
+  ],
+
+  "state_transitions": [
+    {
+      "entity": "Client",
+      "field": "activityYn",
+      "states": ["active", "inactive"],
+      "transitions": [
+        {
+          "from": "active",
+          "to": "inactive",
+          "trigger": "비활성화 버튼 클릭",
+          "requireConfirm": true,
+          "sideEffects": ["관련 사용자 로그아웃", "새 로그인 차단"]
+        },
+        {
+          "from": "inactive",
+          "to": "active",
+          "trigger": "활성화 버튼 클릭",
+          "requireConfirm": false,
+          "sideEffects": ["로그인 허용"]
+        }
+      ],
+      "testScenarios": [
+        "활성 → 비활성 전환 + 확인 다이얼로그",
+        "비활성 → 활성 전환 (확인 없이)",
+        "비활성 클라이언트로 로그인 시도 → 차단",
+        "활성화 후 로그인 → 성공"
+      ]
+    },
+    {
+      "entity": "Menu",
+      "field": "displayYn",
+      "states": ["visible", "hidden"],
+      "transitions": [
+        {
+          "from": "visible",
+          "to": "hidden",
+          "trigger": "표시 체크박스 해제",
+          "cascade": "하위 메뉴도 숨김"
+        },
+        {
+          "from": "hidden",
+          "to": "visible",
+          "trigger": "표시 체크박스 선택",
+          "cascade": "상위 메뉴가 hidden이면 표시 안됨"
+        }
+      ],
+      "testScenarios": [
+        "상위 메뉴 숨김 → 하위 메뉴 자동 숨김",
+        "상위 메뉴 숨김 상태에서 하위 표시 → 실제 표시 안됨",
+        "상위 표시 + 하위 숨김 → 하위만 안보임"
+      ]
+    }
+  ],
+
+  "permissions": {
+    "roles": ["ADMIN", "OPERATOR", "VIEWER"],
+    "resources": [
+      {
+        "name": "Client",
+        "actions": {
+          "CREATE": ["ADMIN"],
+          "READ": ["ADMIN", "OPERATOR", "VIEWER"],
+          "UPDATE": ["ADMIN", "OPERATOR"],
+          "DELETE": ["ADMIN"]
+        },
+        "testScenarios": [
+          "ADMIN - 모든 CRUD 가능",
+          "OPERATOR - 생성/삭제 불가, 조회/수정 가능",
+          "VIEWER - 조회만 가능",
+          "권한 없는 작업 시도 → 403 에러"
+        ]
+      },
+      {
+        "name": "Menu",
+        "actions": {
+          "CREATE": ["ADMIN", "OPERATOR"],
+          "READ": ["ADMIN", "OPERATOR", "VIEWER"],
+          "UPDATE": ["ADMIN", "OPERATOR"],
+          "DELETE": ["ADMIN"]
+        },
+        "testScenarios": [
+          "OPERATOR - 메뉴 생성/수정 가능, 삭제 불가",
+          "VIEWER - 버튼 비활성화 확인"
+        ]
+      }
+    ],
+    "ui_restrictions": [
+      {
+        "role": "VIEWER",
+        "restrictions": [
+          "등록 버튼 숨김",
+          "수정 버튼 비활성화",
+          "삭제 버튼 숨김",
+          "토글 스위치 비활성화"
+        ]
+      }
+    ]
+  },
+
+  "error_scenarios": [
+    {
+      "category": "validation",
+      "errors": [
+        { "code": "REQUIRED", "message": "{field}을(를) 입력해주세요", "httpStatus": 400 },
+        { "code": "INVALID_FORMAT", "message": "올바른 형식이 아닙니다", "httpStatus": 400 },
+        { "code": "DUPLICATE", "message": "이미 존재하는 {item}입니다", "httpStatus": 409 }
+      ]
+    },
+    {
+      "category": "authorization",
+      "errors": [
+        { "code": "UNAUTHORIZED", "message": "로그인이 필요합니다", "httpStatus": 401 },
+        { "code": "FORBIDDEN", "message": "권한이 없습니다", "httpStatus": 403 },
+        { "code": "TOKEN_EXPIRED", "message": "세션이 만료되었습니다", "httpStatus": 401 }
+      ]
+    },
+    {
+      "category": "business",
+      "errors": [
+        { "code": "HAS_CHILDREN", "message": "하위 데이터가 존재하여 삭제할 수 없습니다", "httpStatus": 400 },
+        { "code": "IN_USE", "message": "사용 중인 {item}은 삭제할 수 없습니다", "httpStatus": 400 },
+        { "code": "INACTIVE_PARENT", "message": "비활성화된 {parent}에 추가할 수 없습니다", "httpStatus": 400 }
+      ]
+    },
+    {
+      "category": "network",
+      "errors": [
+        { "code": "TIMEOUT", "message": "요청 시간이 초과되었습니다", "httpStatus": 504 },
+        { "code": "SERVER_ERROR", "message": "서버 오류가 발생했습니다", "httpStatus": 500 },
+        { "code": "SERVICE_UNAVAILABLE", "message": "서비스를 일시적으로 사용할 수 없습니다", "httpStatus": 503 }
+      ]
+    }
+  ],
+
+  "boundary_values": [
+    {
+      "field": "name",
+      "type": "string",
+      "constraints": { "minLength": 1, "maxLength": 100 },
+      "testValues": {
+        "valid": ["A", "정상이름", "A".repeat(100)],
+        "invalid": ["", "A".repeat(101)],
+        "edge": ["A", "A".repeat(100)]
+      }
+    },
+    {
+      "field": "sortOrder",
+      "type": "number",
+      "constraints": { "min": 0, "max": 9999 },
+      "testValues": {
+        "valid": [0, 1, 5000, 9999],
+        "invalid": [-1, 10000],
+        "edge": [0, 9999]
+      }
     }
   ]
 }

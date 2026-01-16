@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>E2E Dashboard - Test Data Injector</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: #eee;
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 10px;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #888;
+      margin-bottom: 40px;
+    }
+
+    .card {
+      background: #16213e;
+      border-radius: 16px;
+      padding: 30px;
+      margin-bottom: 20px;
+    }
+
+    .card h2 {
+      font-size: 18px;
+      color: #667eea;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #333;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 14px;
+      color: #888;
+      margin-bottom: 8px;
+    }
+
+    .form-group select,
+    .form-group input {
+      width: 100%;
+      padding: 12px 16px;
+      background: #1a1a2e;
+      border: 1px solid #333;
+      border-radius: 8px;
+      color: #eee;
+      font-size: 14px;
+    }
+
+    .form-group select:focus,
+    .form-group input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    .btn {
+      padding: 14px 28px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+      width: 100%;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-danger {
+      background: #ef4444;
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #dc2626;
+    }
+
+    .btn-secondary {
+      background: #333;
+      color: #ddd;
+    }
+
+    .btn-secondary:hover {
+      background: #444;
+    }
+
+    .btn-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .result {
+      margin-top: 20px;
+      padding: 16px;
+      background: #1a1a2e;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+      display: none;
+    }
+
+    .result.show {
+      display: block;
+    }
+
+    .result.success {
+      border-left: 4px solid #10b981;
+    }
+
+    .result.error {
+      border-left: 4px solid #ef4444;
+      color: #ef4444;
+    }
+
+    .quick-actions {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .quick-btn {
+      padding: 10px;
+      background: #1a1a2e;
+      border: 1px solid #333;
+      border-radius: 8px;
+      color: #ddd;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .quick-btn:hover {
+      border-color: #667eea;
+      background: #252540;
+    }
+
+    .nav-link {
+      display: inline-block;
+      margin-top: 20px;
+      color: #667eea;
+      text-decoration: none;
+    }
+
+    .nav-link:hover {
+      text-decoration: underline;
+    }
+
+    .status-bar {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 20px;
+      padding: 15px;
+      background: #1a1a2e;
+      border-radius: 8px;
+    }
+
+    .status-item {
+      text-align: center;
+    }
+
+    .status-item .value {
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    .status-item .label {
+      font-size: 12px;
+      color: #888;
+    }
+
+    .status-item.total .value { color: #667eea; }
+    .status-item.passed .value { color: #10b981; }
+    .status-item.failed .value { color: #ef4444; }
+    .status-item.pending .value { color: #888; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Test Data Injector</h1>
+    <p class="subtitle">대시보드 기능 테스트를 위한 샘플 데이터 주입 도구</p>
+
+    <!-- Current Status -->
+    <div class="card">
+      <h2>현재 상태</h2>
+      <div class="status-bar">
+        <div class="status-item total">
+          <div class="value" id="statTotal">0</div>
+          <div class="label">전체</div>
+        </div>
+        <div class="status-item passed">
+          <div class="value" id="statPassed">0</div>
+          <div class="label">성공</div>
+        </div>
+        <div class="status-item failed">
+          <div class="value" id="statFailed">0</div>
+          <div class="label">실패</div>
+        </div>
+        <div class="status-item pending">
+          <div class="value" id="statPending">0</div>
+          <div class="label">대기</div>
+        </div>
+      </div>
+      <a href="/" class="nav-link">← 대시보드로 이동</a>
+    </div>
+
+    <!-- Quick Inject -->
+    <div class="card">
+      <h2>빠른 주입</h2>
+      <p style="color: #888; margin-bottom: 15px; font-size: 13px;">클릭 한 번으로 특정 그룹에 샘플 데이터 주입</p>
+      <div class="quick-actions" id="quickActions">
+        <!-- 동적으로 생성됨 -->
+      </div>
+    </div>
+
+    <!-- Custom Inject -->
+    <div class="card">
+      <h2>커스텀 주입</h2>
+      <div class="form-group">
+        <label>대상 그룹</label>
+        <select id="groupSelect">
+          <option value="">전체 그룹</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>성공 TC 수</label>
+          <input type="number" id="passCount" value="5" min="0">
+        </div>
+        <div class="form-group">
+          <label>실패 TC 수</label>
+          <input type="number" id="failCount" value="2" min="0">
+        </div>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="injectCustom()">샘플 데이터 주입</button>
+        <button class="btn btn-danger" onclick="resetAll()">전체 초기화</button>
+      </div>
+      <div id="result" class="result"></div>
+    </div>
+
+    <!-- Preset Scenarios -->
+    <div class="card">
+      <h2>시나리오 프리셋</h2>
+      <p style="color: #888; margin-bottom: 15px; font-size: 13px;">다양한 테스트 상황을 시뮬레이션</p>
+      <div class="btn-group" style="grid-template-columns: 1fr 1fr 1fr;">
+        <button class="btn btn-secondary" onclick="preset('allPass')">전체 성공 (100%)</button>
+        <button class="btn btn-secondary" onclick="preset('mixed')">혼합 (70%)</button>
+        <button class="btn btn-secondary" onclick="preset('allFail')">전체 실패 (0%)</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let groups = [];
+
+    // Load groups on page load
+    async function loadGroups() {
+      try {
+        const res = await fetch('/api/groups/list');
+        groups = await res.json();
+
+        // Populate select
+        const select = document.getElementById('groupSelect');
+        select.innerHTML = '<option value="">전체 그룹</option>';
+        groups.forEach(g => {
+          select.innerHTML += `<option value="${g.key}">${g.name} (${g.count}개)</option>`;
+        });
+
+        // Create quick action buttons
+        const quickActions = document.getElementById('quickActions');
+        quickActions.innerHTML = groups.map(g => `
+          <button class="quick-btn" onclick="quickInject('${g.key}')">
+            ${g.name}<br><small>${g.count}개</small>
+          </button>
+        `).join('');
+
+        updateStats();
+      } catch (err) {
+        console.error('Failed to load groups:', err);
+      }
+    }
+
+    // Update statistics
+    async function updateStats() {
+      try {
+        const res = await fetch('/api/summary');
+        const data = await res.json();
+
+        document.getElementById('statTotal').textContent = data.total;
+        document.getElementById('statPassed').textContent = data.passed;
+        document.getElementById('statFailed').textContent = data.failed;
+        document.getElementById('statPending').textContent = data.pending;
+      } catch (err) {
+        console.error('Failed to update stats:', err);
+      }
+    }
+
+    // Quick inject for a specific group
+    async function quickInject(groupKey) {
+      const group = groups.find(g => g.key === groupKey);
+      if (!group) return;
+
+      const passCount = Math.floor(group.count * 0.7);
+      const failCount = Math.floor(group.count * 0.2);
+
+      await injectSample(groupKey, passCount, failCount);
+    }
+
+    // Custom inject
+    async function injectCustom() {
+      const group = document.getElementById('groupSelect').value;
+      const passCount = parseInt(document.getElementById('passCount').value) || 0;
+      const failCount = parseInt(document.getElementById('failCount').value) || 0;
+
+      await injectSample(group, passCount, failCount);
+    }
+
+    // Inject sample data
+    async function injectSample(group, passCount, failCount) {
+      const resultEl = document.getElementById('result');
+
+      try {
+        const res = await fetch('/api/inject-sample', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ group, passCount, failCount })
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+          resultEl.className = 'result show success';
+          resultEl.textContent = `✅ 샘플 데이터 주입 완료!\n\n` +
+            `그룹: ${group || '전체'}\n` +
+            `성공: ${data.injected.passed}개\n` +
+            `실패: ${data.injected.failed}개\n` +
+            `대기: ${data.injected.pending}개\n` +
+            `총 TC: ${data.total}개`;
+        } else {
+          resultEl.className = 'result show error';
+          resultEl.textContent = `❌ 오류: ${data.error}`;
+        }
+
+        updateStats();
+      } catch (err) {
+        resultEl.className = 'result show error';
+        resultEl.textContent = `❌ 요청 실패: ${err.message}`;
+      }
+    }
+
+    // Reset all results
+    async function resetAll() {
+      if (!confirm('모든 테스트 결과를 초기화하시겠습니까?')) return;
+
+      try {
+        await fetch('/api/reset', { method: 'POST' });
+
+        // Reload scenarios
+        const scenarioPath = '/Users/admin/Desktop/workSpace/socar-backoffice-portal-frontend/docs/qa/latest/scenarios/e2e-scenarios.md';
+        await fetch('/api/load-scenarios', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scenarioPath })
+        });
+
+        const resultEl = document.getElementById('result');
+        resultEl.className = 'result show success';
+        resultEl.textContent = '✅ 초기화 완료!';
+
+        updateStats();
+        loadGroups();
+      } catch (err) {
+        const resultEl = document.getElementById('result');
+        resultEl.className = 'result show error';
+        resultEl.textContent = `❌ 초기화 실패: ${err.message}`;
+      }
+    }
+
+    // Preset scenarios
+    async function preset(type) {
+      const resultEl = document.getElementById('result');
+
+      // First reset
+      await fetch('/api/reset', { method: 'POST' });
+      await fetch('/api/load-scenarios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scenarioPath: '/Users/admin/Desktop/workSpace/socar-backoffice-portal-frontend/docs/qa/latest/scenarios/e2e-scenarios.md' })
+      });
+
+      // Then inject based on preset
+      for (const g of groups) {
+        let passCount, failCount;
+
+        switch (type) {
+          case 'allPass':
+            passCount = g.count;
+            failCount = 0;
+            break;
+          case 'allFail':
+            passCount = 0;
+            failCount = g.count;
+            break;
+          case 'mixed':
+          default:
+            passCount = Math.floor(g.count * 0.7);
+            failCount = Math.floor(g.count * 0.2);
+            break;
+        }
+
+        await fetch('/api/inject-sample', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ group: g.key, passCount, failCount })
+        });
+      }
+
+      resultEl.className = 'result show success';
+      resultEl.textContent = `✅ 프리셋 "${type}" 적용 완료!`;
+
+      updateStats();
+    }
+
+    // Initialize
+    loadGroups();
+  </script>
+</body>
+</html>

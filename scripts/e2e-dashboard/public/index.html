@@ -1,0 +1,3279 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>E2E Test Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      min-height: 100vh;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 20px 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .header h1 {
+      font-size: 24px;
+      font-weight: 600;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary { background: #10b981; color: white; }
+    .btn-primary:hover { background: #059669; }
+    .btn-secondary { background: rgba(255,255,255,0.2); color: white; }
+    .btn-secondary:hover { background: rgba(255,255,255,0.3); }
+
+    .status-badge {
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .status-connected { background: #10b981; }
+    .status-disconnected { background: #ef4444; }
+    .status-running { background: #f59e0b; animation: pulse 1.5s infinite; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
+    .container {
+      display: grid;
+      grid-template-columns: 350px 1fr;
+      gap: 20px;
+      padding: 20px;
+      max-width: 1800px;
+      margin: 0 auto;
+    }
+
+    .sidebar {
+      background: #16213e;
+      border-radius: 12px;
+      padding: 20px;
+      max-height: calc(100vh - 140px);
+      overflow-y: auto;
+    }
+
+    .sidebar h2 {
+      font-size: 16px;
+      color: #888;
+      margin-bottom: 15px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    /* Group styles */
+    .group-container {
+      margin-bottom: 15px;
+    }
+
+    .group-header {
+      display: flex;
+      align-items: center;
+      padding: 12px 15px;
+      background: #1a1a2e;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      border-left: 4px solid #667eea;
+    }
+
+    .group-header:hover { background: #252540; }
+
+    .group-header.collapsed .group-arrow { transform: rotate(-90deg); }
+
+    .group-arrow {
+      margin-right: 10px;
+      transition: transform 0.2s;
+      font-size: 12px;
+      color: #888;
+    }
+
+    .group-name {
+      flex: 1;
+      font-weight: 600;
+      color: #ddd;
+    }
+
+    .group-badge {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+    }
+
+    .group-stat {
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+
+    .group-stat.passed { background: rgba(16, 185, 129, 0.3); color: #10b981; }
+    .group-stat.failed { background: rgba(239, 68, 68, 0.3); color: #ef4444; }
+    .group-stat.pending { background: rgba(234, 179, 8, 0.3); color: #eab308; }
+
+    .group-items {
+      padding-left: 15px;
+      overflow: hidden;
+      transition: max-height 0.3s ease-out;
+    }
+
+    .group-items.collapsed {
+      max-height: 0 !important;
+    }
+
+    .tc-list {
+      list-style: none;
+    }
+
+    .tc-item {
+      padding: 10px 12px;
+      margin-top: 6px;
+      background: #1a1a2e;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      border-left: 3px solid #444;
+    }
+
+    .tc-item:hover { background: #252540; }
+    .tc-item.active { background: #252540; border-left-color: #667eea; }
+    .tc-item.passed { border-left-color: #10b981; }
+    .tc-item.failed { border-left-color: #ef4444; }
+    .tc-item.pending { border-left-color: #eab308; }
+    .tc-item.running { border-left-color: #f59e0b; }
+
+    .tc-id {
+      font-family: 'Monaco', 'Consolas', monospace;
+      font-size: 11px;
+      color: #667eea;
+      margin-bottom: 3px;
+    }
+
+    .tc-name {
+      font-size: 13px;
+      color: #bbb;
+    }
+
+    .tc-status-icon {
+      float: right;
+      font-size: 16px;
+    }
+
+    .main-content {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* Chart Section */
+    .chart-section {
+      background: #16213e;
+      border-radius: 12px;
+      padding: 25px;
+    }
+
+    .chart-section h3 {
+      font-size: 16px;
+      color: #888;
+      margin-bottom: 20px;
+    }
+
+    .charts-grid {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      gap: 30px;
+      align-items: start;
+    }
+
+    .donut-chart-container {
+      position: relative;
+      width: 250px;
+      height: 250px;
+      margin: 0 auto;
+    }
+
+    .donut-center {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+    }
+
+    .donut-center .pass-rate {
+      font-size: 42px;
+      font-weight: 700;
+      color: #10b981;
+    }
+
+    .donut-center .label {
+      font-size: 14px;
+      color: #888;
+    }
+
+    .bar-chart-container {
+      height: 250px;
+    }
+
+    /* Detail Panel */
+    .detail-panel {
+      background: #16213e;
+      border-radius: 12px;
+      padding: 25px;
+    }
+
+    .current-tc {
+      margin-bottom: 20px;
+    }
+
+    .current-tc h2 {
+      font-size: 14px;
+      color: #888;
+      margin-bottom: 8px;
+    }
+
+    .current-tc-id {
+      font-size: 24px;
+      font-weight: 700;
+      color: #667eea;
+      margin-bottom: 6px;
+    }
+
+    .current-tc-name {
+      font-size: 16px;
+      color: #ddd;
+    }
+
+    .steps-container h3 {
+      font-size: 16px;
+      color: #888;
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .step-count {
+      background: #667eea;
+      padding: 2px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+    }
+
+    .steps-list {
+      list-style: none;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .step-item {
+      display: flex;
+      align-items: flex-start;
+      padding: 12px;
+      margin-bottom: 8px;
+      background: #1a1a2e;
+      border-radius: 8px;
+      transition: all 0.3s;
+    }
+
+    .step-item.active {
+      background: #252540;
+      transform: scale(1.01);
+      box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
+    }
+
+    .step-item.passed { background: rgba(16, 185, 129, 0.1); }
+    .step-item.failed { background: rgba(239, 68, 68, 0.1); }
+    .step-item.pending { background: rgba(234, 179, 8, 0.1); }
+
+    .step-number {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #333;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 13px;
+      margin-right: 12px;
+      flex-shrink: 0;
+    }
+
+    .step-item.passed .step-number { background: #10b981; }
+    .step-item.failed .step-number { background: #ef4444; }
+    .step-item.pending .step-number { background: #eab308; }
+    .step-item.active .step-number { background: #667eea; animation: pulse 1s infinite; }
+
+    .step-content {
+      flex: 1;
+    }
+
+    .step-name {
+      font-size: 13px;
+      color: #ddd;
+      margin-bottom: 4px;
+    }
+
+    .step-message {
+      font-size: 12px;
+      color: #888;
+      word-break: break-all;
+    }
+
+    .step-message.error {
+      color: #ef4444;
+      background: rgba(239, 68, 68, 0.1);
+      padding: 6px 10px;
+      border-radius: 4px;
+      margin-top: 6px;
+    }
+
+    /* Summary Stats */
+    .summary-stats-row {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card {
+      flex: 1;
+      background: #1a1a2e;
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .stat-card .value {
+      font-size: 32px;
+      font-weight: 700;
+    }
+
+    .stat-card .label {
+      font-size: 12px;
+      color: #888;
+      text-transform: uppercase;
+      margin-top: 5px;
+    }
+
+    .stat-card.total .value { color: #667eea; }
+    .stat-card.passed .value { color: #10b981; }
+    .stat-card.failed .value { color: #ef4444; }
+    .stat-card.running .value { color: #a855f7; }
+
+    /* Failed TCs Section */
+    /* Group Section (LNB 그룹 선택 시 표시) */
+    .group-section {
+      background: #16213e;
+      border-radius: 12px;
+      padding: 25px;
+    }
+
+    .group-section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #333;
+    }
+
+    .group-section-header h3 {
+      font-size: 16px;
+      color: #667eea;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .group-section-stats {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 15px;
+    }
+
+    .group-section-stat {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+    }
+
+    .group-section-stat .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .group-section-stat.passed .dot { background: #10b981; }
+    .group-section-stat.failed .dot { background: #ef4444; }
+    .group-section-stat.pending .dot { background: #eab308; }
+
+    .group-section-tc-list {
+      list-style: none;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+      gap: 10px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .group-section-tc-item {
+      display: flex;
+      align-items: center;
+      padding: 12px;
+      background: #1a1a2e;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      border-left: 3px solid #444;
+    }
+
+    .group-section-tc-item:hover {
+      background: #252540;
+    }
+
+    .group-section-tc-item.passed { border-left-color: #10b981; }
+    .group-section-tc-item.failed { border-left-color: #ef4444; }
+    .group-section-tc-item.pending { border-left-color: #eab308; }
+
+    .group-section-tc-item .icon {
+      font-size: 16px;
+      margin-right: 10px;
+    }
+
+    .group-section-tc-item .info {
+      flex: 1;
+    }
+
+    .group-section-tc-item .tc-id {
+      font-family: 'Monaco', 'Consolas', monospace;
+      font-size: 11px;
+      color: #667eea;
+    }
+
+    .group-section-tc-item .tc-name {
+      font-size: 13px;
+      color: #ddd;
+    }
+
+    .failed-section {
+      background: #16213e;
+      border-radius: 12px;
+      padding: 25px;
+    }
+
+    .failed-section h3 {
+      font-size: 16px;
+      color: #ef4444;
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .failed-tc-item {
+      background: rgba(239, 68, 68, 0.1);
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 10px;
+      border-left: 4px solid #ef4444;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .failed-tc-item:hover {
+      background: rgba(239, 68, 68, 0.15);
+    }
+
+    .failed-tc-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .failed-tc-id {
+      font-family: 'Monaco', 'Consolas', monospace;
+      font-size: 14px;
+      color: #ef4444;
+      font-weight: 600;
+    }
+
+    .failed-tc-group {
+      font-size: 12px;
+      background: rgba(239, 68, 68, 0.2);
+      padding: 2px 8px;
+      border-radius: 10px;
+      color: #ef4444;
+    }
+
+    .failed-tc-name {
+      font-size: 13px;
+      color: #ddd;
+      margin-bottom: 10px;
+    }
+
+    .failed-tc-reason {
+      font-size: 12px;
+      color: #888;
+      background: #1a1a2e;
+      padding: 10px;
+      border-radius: 6px;
+    }
+
+    .failed-tc-reason strong {
+      color: #ef4444;
+    }
+
+    .video-link {
+      font-size: 12px;
+      background: #7c3aed;
+      color: white;
+      padding: 4px 10px;
+      border-radius: 12px;
+      text-decoration: none;
+      margin-left: auto;
+      transition: background 0.2s;
+    }
+
+    .video-link:hover {
+      background: #6d28d9;
+    }
+
+    /* Pending Section */
+    .pending-section {
+      background: #16213e;
+      border-radius: 12px;
+      padding: 25px;
+      margin-top: 20px;
+    }
+
+    .pending-section h3 {
+      font-size: 16px;
+      color: #eab308;
+      margin-bottom: 15px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pending-tc-item {
+      background: rgba(234, 179, 8, 0.1);
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 10px;
+      border-left: 4px solid #eab308;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .pending-tc-item:hover {
+      background: rgba(234, 179, 8, 0.15);
+    }
+
+    .pending-tc-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .pending-tc-id {
+      font-family: 'Monaco', 'Consolas', monospace;
+      font-size: 14px;
+      color: #eab308;
+      font-weight: 600;
+    }
+
+    .pending-tc-group {
+      font-size: 12px;
+      background: rgba(234, 179, 8, 0.2);
+      padding: 2px 8px;
+      border-radius: 10px;
+      color: #eab308;
+    }
+
+    .pending-tc-name {
+      font-size: 13px;
+      color: #ddd;
+      margin-bottom: 10px;
+    }
+
+    .pending-tc-reason {
+      font-size: 12px;
+      color: #888;
+      background: #1a1a2e;
+      padding: 10px;
+      border-radius: 6px;
+    }
+
+    .pending-tc-reason strong {
+      color: #eab308;
+    }
+
+    .stat-card.pending { background: rgba(234, 179, 8, 0.1); }
+    .stat-card.pending .value { color: #eab308; }
+
+    .stat-card.running { background: rgba(168, 85, 247, 0.1); }
+
+    .stat-card.clickable {
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .stat-card.clickable:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .progress-bar {
+      height: 6px;
+      background: #333;
+      border-radius: 3px;
+      margin-top: 20px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #667eea, #764ba2);
+      transition: width 0.3s;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #666;
+    }
+
+    .empty-state-icon {
+      font-size: 40px;
+      margin-bottom: 10px;
+    }
+
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal {
+      background: #16213e;
+      border-radius: 16px;
+      width: 90%;
+      max-width: 800px;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+
+    .modal-header {
+      padding: 20px 25px;
+      border-bottom: 1px solid #333;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-header h2 {
+      font-size: 18px;
+      color: #ddd;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      color: #888;
+      font-size: 24px;
+      cursor: pointer;
+    }
+
+    .modal-close:hover { color: #fff; }
+
+    .modal-body {
+      padding: 25px;
+    }
+
+    .modal-tc-id {
+      font-family: 'Monaco', 'Consolas', monospace;
+      font-size: 16px;
+      color: #667eea;
+      margin-bottom: 8px;
+    }
+
+    .modal-tc-name {
+      font-size: 20px;
+      color: #fff;
+      margin-bottom: 20px;
+    }
+
+    .modal-section {
+      margin-bottom: 20px;
+    }
+
+    .modal-section h4 {
+      font-size: 14px;
+      color: #888;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+    }
+
+    .modal-back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      background: #252540;
+      border: none;
+      border-radius: 6px;
+      color: #888;
+      font-size: 13px;
+      cursor: pointer;
+      margin-bottom: 15px;
+      transition: all 0.2s;
+    }
+
+    .modal-back-btn:hover {
+      background: #333;
+      color: #ddd;
+    }
+
+    .improvement-box {
+      margin-top: 15px;
+      padding: 15px;
+      background: rgba(102, 126, 234, 0.1);
+      border: 1px solid #667eea;
+      border-radius: 8px;
+    }
+
+    .improvement-box h5 {
+      color: #667eea;
+      font-size: 13px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .improvement-box ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+
+    .improvement-box li {
+      color: #bbb;
+      font-size: 12px;
+      margin-bottom: 6px;
+      line-height: 1.5;
+    }
+
+    .improvement-box code {
+      background: #1a1a2e;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      color: #10b981;
+    }
+
+    .improvement-box.loading {
+      text-align: center;
+      color: #888;
+    }
+
+    .improvement-box.loading .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid #667eea;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .improvement-box .llm-badge {
+      display: inline-block;
+      padding: 2px 6px;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white;
+      font-size: 10px;
+      border-radius: 4px;
+      margin-left: 6px;
+    }
+
+    .improvement-box .cached-badge {
+      display: inline-block;
+      padding: 2px 6px;
+      background: #4b5563;
+      color: white;
+      font-size: 10px;
+      border-radius: 4px;
+      margin-left: 6px;
+    }
+
+    /* Group Detail Modal */
+    .group-detail-header {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      margin-bottom: 25px;
+    }
+
+    .group-detail-name {
+      font-size: 24px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .group-detail-badge {
+      padding: 6px 14px;
+      border-radius: 15px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .group-detail-stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 15px;
+      margin-bottom: 25px;
+    }
+
+    .group-stat-card {
+      background: #1a1a2e;
+      border-radius: 10px;
+      padding: 18px;
+      text-align: center;
+    }
+
+    .group-stat-card .value {
+      font-size: 28px;
+      font-weight: 700;
+    }
+
+    .group-stat-card .label {
+      font-size: 12px;
+      color: #888;
+      margin-top: 5px;
+    }
+
+    .group-stat-card.total .value { color: #667eea; }
+    .group-stat-card.passed .value { color: #10b981; }
+    .group-stat-card.failed .value { color: #ef4444; }
+    .group-stat-card.pending .value { color: #eab308; }
+
+    .group-detail-tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid #333;
+      padding-bottom: 10px;
+    }
+
+    .group-detail-tab {
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      color: #888;
+      transition: all 0.2s;
+      background: transparent;
+      border: none;
+    }
+
+    .group-detail-tab:hover {
+      background: #252540;
+      color: #ddd;
+    }
+
+    .group-detail-tab.active {
+      background: #667eea;
+      color: white;
+    }
+
+    .group-detail-tab .count {
+      margin-left: 6px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      background: rgba(255,255,255,0.2);
+    }
+
+    .group-tc-list {
+      list-style: none;
+      max-height: 350px;
+      overflow-y: auto;
+    }
+
+    .group-tc-item {
+      display: flex;
+      align-items: center;
+      padding: 14px;
+      margin-bottom: 8px;
+      background: #1a1a2e;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+      border-left: 4px solid #444;
+    }
+
+    .group-tc-item:hover {
+      background: #252540;
+    }
+
+    .group-tc-item.passed { border-left-color: #10b981; }
+    .group-tc-item.failed { border-left-color: #ef4444; }
+    .group-tc-item.pending { border-left-color: #eab308; }
+
+    .group-tc-icon {
+      font-size: 20px;
+      margin-right: 14px;
+    }
+
+    .group-tc-content {
+      flex: 1;
+    }
+
+    .group-tc-id {
+      font-family: 'Monaco', 'Consolas', monospace;
+      font-size: 12px;
+      color: #667eea;
+      margin-bottom: 4px;
+    }
+
+    .group-tc-name {
+      font-size: 14px;
+      color: #ddd;
+    }
+
+    .group-tc-message {
+      font-size: 12px;
+      color: #888;
+      margin-top: 6px;
+    }
+
+    .group-tc-message.error {
+      color: #ef4444;
+      background: rgba(239, 68, 68, 0.1);
+      padding: 8px;
+      border-radius: 6px;
+    }
+
+    .empty-tab-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #666;
+    }
+
+    .empty-tab-state .icon {
+      font-size: 36px;
+      margin-bottom: 10px;
+    }
+
+    /* PDF Report Styles */
+    #pdf-content {
+      display: none;
+      background: white;
+      color: #333;
+      padding: 40px;
+      font-family: 'Noto Sans KR', -apple-system, sans-serif;
+    }
+
+    #pdf-content.printing {
+      display: block;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 210mm;
+      min-height: auto;
+      z-index: 9999;
+      background: white;
+      overflow: auto;
+      max-height: 100vh;
+    }
+
+    #pdf-content h1 {
+      font-size: 24px;
+      margin-bottom: 10px;
+      color: #333;
+    }
+
+    #pdf-content .pdf-date {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 30px;
+    }
+
+    #pdf-content .pdf-summary {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+
+    #pdf-content .pdf-stat {
+      flex: 1;
+      text-align: center;
+      padding: 20px;
+      background: #f5f5f5;
+      border-radius: 8px;
+    }
+
+    #pdf-content .pdf-stat .value {
+      font-size: 36px;
+      font-weight: 700;
+    }
+
+    #pdf-content .pdf-stat.passed .value { color: #10b981; }
+    #pdf-content .pdf-stat.failed .value { color: #ef4444; }
+
+    #pdf-content table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 30px;
+    }
+
+    #pdf-content th, #pdf-content td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+    }
+
+    #pdf-content th {
+      background: #f5f5f5;
+      font-weight: 600;
+    }
+
+    #pdf-content .status-passed { color: #10b981; }
+    #pdf-content .status-failed { color: #ef4444; }
+
+    #pdf-content .failed-details {
+      background: #fff5f5;
+      border: 1px solid #ef4444;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    #pdf-content .failed-details h3 {
+      color: #ef4444;
+      margin-bottom: 15px;
+    }
+
+    /* Saved Indicator */
+    .saved-indicator {
+      font-size: 12px;
+      color: #10b981;
+      padding: 6px 12px;
+      background: rgba(16, 185, 129, 0.2);
+      border-radius: 15px;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* History List Styles */
+    .history-list {
+      list-style: none;
+    }
+
+    .history-item {
+      display: flex;
+      align-items: center;
+      padding: 15px;
+      margin-bottom: 10px;
+      background: #1a1a2e;
+      border-radius: 10px;
+      border-left: 4px solid #667eea;
+      transition: all 0.2s;
+    }
+
+    .history-item:hover {
+      background: #252540;
+    }
+
+    .history-item .info {
+      flex: 1;
+    }
+
+    .history-item .date {
+      font-size: 14px;
+      color: #ddd;
+      margin-bottom: 5px;
+    }
+
+    .history-item .stats {
+      font-size: 12px;
+      color: #888;
+      display: flex;
+      gap: 15px;
+    }
+
+    .history-item .stats .stat {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .history-item .stats .passed { color: #10b981; }
+    .history-item .stats .failed { color: #ef4444; }
+
+    .history-item .actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .history-item .btn-restore {
+      padding: 8px 16px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .history-item .btn-restore:hover {
+      background: #5a67d8;
+    }
+
+    .history-item .btn-delete {
+      padding: 8px 12px;
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .history-item .btn-delete:hover {
+      background: rgba(239, 68, 68, 0.3);
+    }
+
+    .history-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px 0;
+      border-bottom: 1px solid #333;
+      margin-bottom: 15px;
+    }
+
+    .history-actions .btn-clear-all {
+      padding: 8px 16px;
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .history-actions .btn-clear-all:hover {
+      background: rgba(239, 68, 68, 0.3);
+    }
+
+    .history-current-badge {
+      padding: 4px 10px;
+      background: #10b981;
+      color: white;
+      border-radius: 10px;
+      font-size: 11px;
+      margin-left: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>E2E Test Dashboard</h1>
+    <div class="header-actions">
+      <span id="savedIndicator" class="saved-indicator" style="display: none;">💾 저장됨</span>
+      <button class="btn btn-secondary" onclick="location.href='/history.html'" title="이전 테스트 이력 관리">📋 이력</button>
+      <button class="btn btn-primary" onclick="downloadPdf()">📄 PDF</button>
+      <button class="btn btn-secondary" onclick="downloadExcel()">Excel</button>
+      <span id="connectionStatus" class="status-badge status-disconnected">연결 끊김</span>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="sidebar">
+      <h2>테스트 케이스</h2>
+      <div id="groupedTCList">
+        <div class="empty-state">
+          <div class="empty-state-icon">📋</div>
+          <div>테스트 대기 중...</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="main-content">
+      <!-- Summary Stats -->
+      <div class="summary-stats-row">
+        <div class="stat-card total">
+          <div class="value" id="statTotal">0</div>
+          <div class="label">전체</div>
+        </div>
+        <div class="stat-card passed">
+          <div class="value" id="statPassed">0</div>
+          <div class="label">성공</div>
+        </div>
+        <div class="stat-card failed clickable" onclick="toggleFailedSection()">
+          <div class="value" id="statFailed">0</div>
+          <div class="label">실패</div>
+        </div>
+        <div class="stat-card running">
+          <div class="value" id="statRunning">0</div>
+          <div class="label">실행 중</div>
+        </div>
+        <div class="stat-card pending clickable" onclick="togglePendingSection()">
+          <div class="value" id="statPending">0</div>
+          <div class="label">보류</div>
+        </div>
+      </div>
+
+      <!-- Charts -->
+      <div class="chart-section">
+        <h3>테스트 결과 차트</h3>
+        <div class="charts-grid">
+          <div>
+            <div class="donut-chart-container">
+              <canvas id="donutChart"></canvas>
+              <div class="donut-center">
+                <div class="pass-rate" id="passRate">0%</div>
+                <div class="label">통과율</div>
+              </div>
+            </div>
+          </div>
+          <div class="bar-chart-container">
+            <canvas id="barChart"></canvas>
+          </div>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <!-- Selected Group TCs (shown when clicking group in LNB) -->
+      <div class="group-section" id="groupSection" style="display: none;">
+        <div class="group-section-header">
+          <h3 id="groupSectionTitle">그룹명</h3>
+          <button class="btn btn-secondary" onclick="closeGroupSection()" style="padding: 4px 12px; font-size: 12px;">닫기</button>
+        </div>
+        <div id="groupSectionList"></div>
+      </div>
+
+      <!-- Failed TCs -->
+      <div class="failed-section" id="failedSection" style="display: none;">
+        <h3>❌ 실패한 테스트 케이스</h3>
+        <div id="failedList"></div>
+      </div>
+
+      <!-- Pending TCs -->
+      <div class="pending-section" id="pendingSection" style="display: none;">
+        <h3>⚠️ 보류한 테스트 케이스</h3>
+        <div id="pendingList"></div>
+      </div>
+
+      <!-- Detail Panel -->
+      <div class="detail-panel">
+        <div class="current-tc" id="currentTC">
+          <h2>현재 실행 중</h2>
+          <div class="current-tc-id" id="currentTCId">-</div>
+          <div class="current-tc-name" id="currentTCName">테스트 시작을 기다리는 중...</div>
+        </div>
+
+        <div class="steps-container">
+          <h3>
+            테스트 단계
+            <span class="step-count" id="stepCount">0/0</span>
+          </h3>
+          <ul id="stepsList" class="steps-list">
+            <li class="empty-state">
+              <div class="empty-state-icon">⏳</div>
+              <div>테스트 케이스를 선택하세요</div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TC Detail Modal -->
+  <div class="modal-overlay" id="tcModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>테스트 케이스 상세</h2>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+    </div>
+  </div>
+
+  <!-- Group Detail Modal -->
+  <div class="modal-overlay" id="groupModal">
+    <div class="modal" style="max-width: 900px;">
+      <div class="modal-header">
+        <h2>그룹 상세 정보</h2>
+        <button class="modal-close" onclick="closeGroupModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="groupModalBody"></div>
+    </div>
+  </div>
+
+  <!-- History Modal -->
+  <div class="modal-overlay" id="historyModal">
+    <div class="modal" style="max-width: 700px;">
+      <div class="modal-header">
+        <h2>📋 테스트 이력</h2>
+        <button class="modal-close" onclick="closeHistoryModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="historyModalBody">
+        <div class="empty-state">
+          <div class="empty-state-icon">📂</div>
+          <div>저장된 이력이 없습니다</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PDF Content (Hidden) -->
+  <div id="pdf-content">
+    <h1>E2E 테스트 결과 리포트</h1>
+    <div class="pdf-date" id="pdfDate"></div>
+    <div class="pdf-summary" id="pdfSummary"></div>
+    <div id="pdfGroupResults"></div>
+    <div id="pdfFailedDetails"></div>
+  </div>
+
+  <script>
+    let ws;
+    let scenarios = [];
+    let results = {};
+    let currentTC = null;
+    let currentStepIndex = null;
+    let donutChart = null;
+    let barChart = null;
+
+    // 동적 그룹명 (서버에서 수신)
+    let groupNames = {};
+    // 프로젝트명 (서버에서 수신)
+    let projectName = '';
+
+    function extractGroup(tcId) {
+      const match = tcId.match(/TC-([A-Z]+)-(?:[A-Z]+-)?E2E-\d{3}/);
+      return match ? match[1] : 'OTHER';
+    }
+
+    function connect() {
+      ws = new WebSocket(`ws://${window.location.host}`);
+
+      ws.onopen = () => {
+        document.getElementById('connectionStatus').textContent = '연결됨';
+        document.getElementById('connectionStatus').className = 'status-badge status-connected';
+      };
+
+      ws.onclose = () => {
+        document.getElementById('connectionStatus').textContent = '연결 끊김';
+        document.getElementById('connectionStatus').className = 'status-badge status-disconnected';
+        setTimeout(connect, 3000);
+      };
+
+      ws.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        handleMessage(message);
+      };
+    }
+
+    function handleMessage(message) {
+      switch (message.type) {
+        case 'init':
+          scenarios = message.data.scenarios || [];
+          results = message.data.results || {};
+          groupNames = message.data.groupNames || {};  // 동적 그룹명 수신
+          projectName = message.data.projectName || '';  // 프로젝트명 수신
+          currentTC = message.data.currentTC;
+          renderGroupedTCList();
+          updateStats();
+          updateCharts();
+          renderFailedTCs();
+          renderPendingTCs();
+          if (currentTC) selectTC(currentTC);
+          // init에서는 저장하지 않음 - tc-start에서 저장
+          break;
+
+        case 'scenarios-loaded':
+          scenarios = message.data;
+          groupNames = message.groupNames || {};  // 동적 그룹명 수신
+          projectName = message.projectName || '';  // 프로젝트명 수신
+          results = {};
+          currentSessionId = null;  // 새 시나리오 로드 = 새 테스트 세션
+          renderGroupedTCList();
+          updateStats();
+          updateCharts();
+          // 새 시나리오 로드 시에는 저장하지 않음 (테스트 시작 시 저장)
+          break;
+
+        case 'tc-start':
+          currentTC = message.data.tcId;
+          currentStepIndex = 0;
+          results[message.data.tcId] = { status: 'running', steps: [] };
+          document.getElementById('connectionStatus').textContent = '테스트 실행 중';
+          document.getElementById('connectionStatus').className = 'status-badge status-running';
+          renderGroupedTCList();
+          selectTC(message.data.tcId);
+          updateStats();
+          updateCharts();
+          saveToLocalStorage();  // TC 시작 시 즉시 저장
+          break;
+
+        case 'tc-step':
+          const { tcId, stepIndex, stepName, status, message: msg, improvements: stepImprovements } = message.data;
+          if (results[tcId]) {
+            results[tcId].steps[stepIndex] = { name: stepName, status, message: msg, improvements: stepImprovements };
+            if (status === 'running') {
+              currentStepIndex = stepIndex;
+            }
+          }
+          if (currentTC === tcId) {
+            renderSteps(tcId);
+          }
+          autoSave();  // 스텝마다 자동 저장
+          break;
+
+        case 'tc-complete':
+          currentStepIndex = null;
+          if (results[message.data.tcId]) {
+            results[message.data.tcId].status = message.data.status;
+            results[message.data.tcId].message = message.data.message;
+            results[message.data.tcId].improvements = message.data.improvements;
+          }
+          renderGroupedTCList();
+          if (currentTC === message.data.tcId) {
+            renderSteps(message.data.tcId);
+          }
+          updateStats();
+          updateCharts();
+          renderFailedTCs();
+          renderPendingTCs();
+          // 그룹 섹션이 열려있으면 업데이트
+          if (selectedGroup) {
+            showGroupSection(selectedGroup);
+          }
+
+          const allDone = scenarios.every(s =>
+            results[s.tcId] && (results[s.tcId].status === 'passed' || results[s.tcId].status === 'failed')
+          );
+          if (allDone) {
+            document.getElementById('connectionStatus').textContent = '테스트 완료';
+            document.getElementById('connectionStatus').className = 'status-badge status-connected';
+          }
+          autoSave();  // 자동 저장
+          break;
+
+        case 'reset':
+          scenarios = [];
+          results = {};
+          currentTC = null;
+          currentStepIndex = null;
+          renderGroupedTCList();
+          updateStats();
+          updateCharts();
+          document.getElementById('currentTCId').textContent = '-';
+          document.getElementById('currentTCName').textContent = '테스트 시작을 기다리는 중...';
+          document.getElementById('stepsList').innerHTML = `
+            <li class="empty-state">
+              <div class="empty-state-icon">⏳</div>
+              <div>테스트 케이스를 선택하세요</div>
+            </li>
+          `;
+          document.getElementById('failedSection').style.display = 'none';
+          break;
+      }
+    }
+
+    function getGroupedScenarios() {
+      const groups = {};
+
+      scenarios.forEach(tc => {
+        const group = tc.group || extractGroup(tc.tcId);
+        if (!groups[group]) {
+          groups[group] = {
+            // 동적 그룹명 우선, 없으면 그룹 코드 사용
+            name: groupNames[group] || group,
+            scenarios: [],
+            stats: { total: 0, passed: 0, failed: 0, running: 0, pending: 0, pending_hold: 0, waiting: 0 }
+          };
+        }
+        groups[group].scenarios.push(tc);
+        groups[group].stats.total++;
+
+        const result = results[tc.tcId];
+        if (result) {
+          if (result.status === 'passed') groups[group].stats.passed++;
+          else if (result.status === 'failed') groups[group].stats.failed++;
+          else if (result.status === 'running') groups[group].stats.running++;
+          else if (result.status === 'pending') {
+            groups[group].stats.pending_hold++;  // 보류
+            groups[group].stats.pending++;
+          }
+          else {
+            groups[group].stats.waiting++;  // 대기
+            groups[group].stats.pending++;
+          }
+        } else {
+          groups[group].stats.waiting++;  // 대기
+          groups[group].stats.pending++;
+        }
+      });
+
+      return groups;
+    }
+
+    function renderGroupedTCList() {
+      const container = document.getElementById('groupedTCList');
+
+      if (scenarios.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">📋</div>
+            <div>테스트 대기 중...</div>
+          </div>
+        `;
+        return;
+      }
+
+      const groups = getGroupedScenarios();
+      // 동적 그룹 순서: 시나리오 등장 순서 유지
+      const seenGroups = [];
+      scenarios.forEach(tc => {
+        const group = tc.group || extractGroup(tc.tcId);
+        if (!seenGroups.includes(group)) seenGroups.push(group);
+      });
+
+      let html = '';
+      seenGroups.forEach(groupKey => {
+        const group = groups[groupKey];
+        if (!group) return;
+
+        html += `
+          <div class="group-container">
+            <div class="group-header" onclick="toggleGroup('${groupKey}')">
+              <span class="group-arrow" id="arrow-${groupKey}">▼</span>
+              <span class="group-name">${group.name}</span>
+              <div class="group-badge">
+                ${group.stats.passed > 0 ? `<span class="group-stat passed">${group.stats.passed}</span>` : ''}
+                ${group.stats.failed > 0 ? `<span class="group-stat failed">${group.stats.failed}</span>` : ''}
+                ${group.stats.pending > 0 ? `<span class="group-stat pending">${group.stats.pending}</span>` : ''}
+              </div>
+            </div>
+            <div class="group-items" id="items-${groupKey}">
+              <ul class="tc-list">
+        `;
+
+        group.scenarios.forEach(tc => {
+          const result = results[tc.tcId];
+          const statusClass = result ? result.status : '';
+          const activeClass = currentTC === tc.tcId ? 'active' : '';
+          const icon = getStatusIcon(result?.status);
+
+          html += `
+            <li class="tc-item ${statusClass} ${activeClass}" onclick="selectTC('${tc.tcId}')">
+              <span class="tc-status-icon">${icon}</span>
+              <div class="tc-id">${tc.tcId}</div>
+              <div class="tc-name">${tc.name}</div>
+            </li>
+          `;
+        });
+
+        html += `
+              </ul>
+            </div>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    let selectedGroup = null;
+
+    function toggleGroup(groupKey, event) {
+      // 그룹명 클릭 시 하단에 TC 목록 표시
+      showGroupSection(groupKey);
+
+      // 화살표 토글 (접기/펼치기)
+      const items = document.getElementById(`items-${groupKey}`);
+      const arrow = document.getElementById(`arrow-${groupKey}`);
+      const header = arrow.parentElement;
+
+      if (items.classList.contains('collapsed')) {
+        items.classList.remove('collapsed');
+        header.classList.remove('collapsed');
+      } else {
+        items.classList.add('collapsed');
+        header.classList.add('collapsed');
+      }
+    }
+
+    function showGroupSection(groupKey) {
+      const groups = getGroupedScenarios();
+      const group = groups[groupKey];
+      if (!group) return;
+
+      selectedGroup = groupKey;
+
+      const section = document.getElementById('groupSection');
+      const title = document.getElementById('groupSectionTitle');
+      const list = document.getElementById('groupSectionList');
+
+      title.innerHTML = `📁 ${group.name} <span style="font-size: 12px; color: #888;">(${group.stats.total}개)</span>`;
+
+      const passRate = group.stats.total > 0
+        ? Math.round((group.stats.passed / group.stats.total) * 100)
+        : 0;
+
+      list.innerHTML = `
+        <div class="group-section-stats">
+          <div class="group-section-stat passed">
+            <span class="dot"></span>
+            성공: ${group.stats.passed}
+          </div>
+          <div class="group-section-stat failed">
+            <span class="dot"></span>
+            실패: ${group.stats.failed}
+          </div>
+          <div class="group-section-stat pending">
+            <span class="dot"></span>
+            대기: ${group.stats.pending}
+          </div>
+          <div style="margin-left: auto; font-size: 14px; font-weight: 600; color: ${passRate >= 80 ? '#10b981' : passRate >= 50 ? '#f59e0b' : '#ef4444'};">
+            ${passRate}% 통과
+          </div>
+        </div>
+        <ul class="group-section-tc-list">
+          ${group.scenarios.map(tc => {
+            const result = results[tc.tcId];
+            const status = result?.status || 'pending';
+            const icon = getStatusIcon(status);
+            return `
+              <li class="group-section-tc-item ${status}" onclick="openModal('${tc.tcId}')">
+                <span class="icon">${icon}</span>
+                <div class="info">
+                  <div class="tc-id">${tc.tcId}</div>
+                  <div class="tc-name">${tc.name}</div>
+                </div>
+              </li>
+            `;
+          }).join('')}
+        </ul>
+      `;
+
+      section.style.display = 'block';
+
+      // Scroll to the section
+      section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function closeGroupSection() {
+      document.getElementById('groupSection').style.display = 'none';
+      selectedGroup = null;
+    }
+
+    function getStatusIcon(status) {
+      switch (status) {
+        case 'passed': return '✅';
+        case 'failed': return '❌';
+        case 'running': return '🔄';
+        case 'pending': return '⚠️';
+        default: return '⬜';
+      }
+    }
+
+    function selectTC(tcId) {
+      currentTC = tcId;
+      const tc = scenarios.find(s => s.tcId === tcId);
+
+      if (tc) {
+        document.getElementById('currentTCId').textContent = tc.tcId;
+        document.getElementById('currentTCName').textContent = tc.name;
+        renderSteps(tcId);
+      }
+
+      document.querySelectorAll('.tc-item').forEach(item => {
+        item.classList.remove('active');
+        if (item.querySelector('.tc-id')?.textContent === tcId) {
+          item.classList.add('active');
+        }
+      });
+    }
+
+    function renderSteps(tcId) {
+      const tc = scenarios.find(s => s.tcId === tcId);
+      const result = results[tcId];
+      const list = document.getElementById('stepsList');
+
+      // 보류/실패 사유 표시 (스텝과 무관하게 항상 먼저 체크)
+      let reasonHtml = '';
+      if (result?.status === 'pending' || result?.status === 'failed') {
+        const isFailure = result.status === 'failed';
+        const icon = isFailure ? '❌' : '⚠️';
+        const label = isFailure ? '실패 사유' : '보류 사유';
+        const bgColor = isFailure ? 'rgba(239, 68, 68, 0.1)' : 'rgba(234, 179, 8, 0.1)';
+        const borderColor = isFailure ? '#ef4444' : '#eab308';
+        const reason = result.message || '사유 정보 없음';
+
+        reasonHtml = `
+          <li class="step-item" style="background: ${bgColor}; border-left: 3px solid ${borderColor}; margin-bottom: 12px;">
+            <div class="step-number" style="background: ${borderColor}; color: white;">${icon}</div>
+            <div class="step-content">
+              <div class="step-name" style="font-weight: bold; color: ${borderColor};">${label}</div>
+              <div class="step-message" style="color: #d1d5db; margin-top: 4px;">${reason}</div>
+            </div>
+          </li>
+        `;
+      }
+
+      if (!tc || tc.steps.length === 0) {
+        list.innerHTML = reasonHtml || `
+          <li class="empty-state">
+            <div class="empty-state-icon">📝</div>
+            <div>단계 정보 없음</div>
+          </li>
+        `;
+        document.getElementById('stepCount').textContent = '0/0';
+        return;
+      }
+
+      const completedSteps = result?.steps?.filter(s => s && (s.status === 'passed' || s.status === 'failed')).length || 0;
+      document.getElementById('stepCount').textContent = `${completedSteps}/${tc.steps.length}`;
+
+      const stepsHtml = tc.steps.map((step, idx) => {
+        const stepResult = result?.steps?.[idx];
+        const statusClass = stepResult?.status || '';
+        const activeClass = result?.status === 'running' && idx === currentStepIndex ? 'active' : '';
+
+        return `
+          <li class="step-item ${statusClass} ${activeClass}">
+            <div class="step-number">${idx + 1}</div>
+            <div class="step-content">
+              <div class="step-name">${step}</div>
+              ${stepResult?.message ? `<div class="step-message ${stepResult.status === 'failed' ? 'error' : ''}">${stepResult.message}</div>` : ''}
+            </div>
+          </li>
+        `;
+      }).join('');
+
+      list.innerHTML = reasonHtml + stepsHtml;
+    }
+
+    function updateStats() {
+      const total = scenarios.length;
+      let passed = 0, failed = 0, running = 0, pending = 0;
+
+      Object.values(results).forEach(r => {
+        if (r.status === 'passed') passed++;
+        else if (r.status === 'failed') failed++;
+        else if (r.status === 'running') running++;
+        else if (r.status === 'pending') pending++;
+      });
+
+      document.getElementById('statTotal').textContent = total;
+      document.getElementById('statPassed').textContent = passed;
+      document.getElementById('statFailed').textContent = failed;
+      document.getElementById('statRunning').textContent = running;
+      document.getElementById('statPending').textContent = pending;
+
+      const progress = total > 0 ? ((passed + failed + pending) / total * 100) : 0;
+      document.getElementById('progressFill').style.width = `${progress}%`;
+
+      const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
+      document.getElementById('passRate').textContent = `${passRate}%`;
+    }
+
+    function updateCharts() {
+      const total = scenarios.length;
+      let passed = 0, failed = 0, pending = 0, waiting = 0;
+
+      Object.values(results).forEach(r => {
+        if (r.status === 'passed') passed++;
+        else if (r.status === 'failed') failed++;
+        else if (r.status === 'pending') pending++;
+      });
+      waiting = total - passed - failed - pending;
+
+      // Donut Chart
+      const donutCtx = document.getElementById('donutChart').getContext('2d');
+      if (donutChart) donutChart.destroy();
+
+      donutChart = new Chart(donutCtx, {
+        type: 'doughnut',
+        data: {
+          labels: ['성공', '실패', '보류', '대기'],
+          datasets: [{
+            data: [passed, failed, pending, waiting],
+            backgroundColor: ['#10b981', '#ef4444', '#f59e0b', '#4b5563'],
+            borderWidth: 0
+          }]
+        },
+        options: {
+          cutout: '75%',
+          plugins: {
+            legend: { display: false }
+          }
+        }
+      });
+
+      // Bar Chart by Group
+      const groups = getGroupedScenarios();
+      const groupKeys = Object.keys(groups);
+
+      const barCtx = document.getElementById('barChart').getContext('2d');
+      if (barChart) barChart.destroy();
+
+      barChart = new Chart(barCtx, {
+        type: 'bar',
+        data: {
+          labels: groupKeys.map(k => groups[k].name),
+          datasets: [
+            {
+              label: '성공',
+              data: groupKeys.map(k => groups[k].stats.passed),
+              backgroundColor: '#10b981'
+            },
+            {
+              label: '실패',
+              data: groupKeys.map(k => groups[k].stats.failed),
+              backgroundColor: '#ef4444'
+            },
+            {
+              label: '보류',
+              data: groupKeys.map(k => groups[k].stats.pending_hold || 0),
+              backgroundColor: '#f59e0b'
+            },
+            {
+              label: '대기',
+              data: groupKeys.map(k => groups[k].stats.waiting ?? 0),
+              backgroundColor: '#4b5563'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          onClick: (event, elements) => {
+            if (elements.length > 0) {
+              const index = elements[0].index;
+              const groupKey = groupKeys[index];
+              openGroupModal(groupKey);
+            }
+          },
+          scales: {
+            x: {
+              stacked: true,
+              grid: { color: '#333' },
+              ticks: { color: '#888' }
+            },
+            y: {
+              stacked: true,
+              grid: { color: '#333' },
+              ticks: { color: '#888' }
+            }
+          },
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: { color: '#888' }
+            },
+            tooltip: {
+              callbacks: {
+                footer: () => '클릭하여 상세 보기'
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function renderFailedTCs() {
+      const failedTCs = scenarios.filter(tc => results[tc.tcId]?.status === 'failed');
+      const section = document.getElementById('failedSection');
+      const list = document.getElementById('failedList');
+
+      if (failedTCs.length === 0) {
+        section.style.display = 'none';
+        return;
+      }
+
+      // 내용만 업데이트, display는 토글 함수에서 관리
+      list.innerHTML = failedTCs.map(tc => {
+        const result = results[tc.tcId];
+        const failedSteps = result?.steps?.filter(s => s?.status === 'failed') || [];
+        const group = tc.group || extractGroup(tc.tcId);
+
+        return `
+          <div class="failed-tc-item" onclick="openModal('${tc.tcId}')">
+            <div class="failed-tc-header">
+              <span class="failed-tc-id">${tc.tcId}</span>
+              <span class="failed-tc-group">${groupNames[group] || group}</span>
+              ${result?.videoPath ? `<a href="file://${result.videoPath}" target="_blank" class="video-link" onclick="event.stopPropagation();">🎬 영상 보기</a>` : ''}
+            </div>
+            <div class="failed-tc-name">${tc.name}</div>
+            <div class="failed-tc-reason">
+              <strong>실패 사유:</strong> ${result?.message || '알 수 없는 오류'}
+              ${failedSteps.length > 0 ? `<br><strong>실패 단계:</strong> ${failedSteps.map(s => s.name).join(', ')}` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderPendingTCs() {
+      const pendingTCs = scenarios.filter(tc => results[tc.tcId]?.status === 'pending');
+      const section = document.getElementById('pendingSection');
+      const list = document.getElementById('pendingList');
+
+      if (pendingTCs.length === 0) {
+        section.style.display = 'none';
+        return;
+      }
+
+      // 내용만 업데이트, display는 토글 함수에서 관리
+      list.innerHTML = pendingTCs.map(tc => {
+        const result = results[tc.tcId];
+        const group = tc.group || extractGroup(tc.tcId);
+
+        return `
+          <div class="pending-tc-item" onclick="openModal('${tc.tcId}')">
+            <div class="pending-tc-header">
+              <span class="pending-tc-id">${tc.tcId}</span>
+              <span class="pending-tc-group">${groupNames[group] || group}</span>
+            </div>
+            <div class="pending-tc-name">${tc.name}</div>
+            <div class="pending-tc-reason">
+              <strong>보류 사유:</strong> ${result?.message || '사유 미기재'}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function togglePendingSection() {
+      const section = document.getElementById('pendingSection');
+      const pendingTCs = scenarios.filter(tc => results[tc.tcId]?.status === 'pending');
+
+      if (pendingTCs.length === 0) {
+        alert('보류한 테스트 케이스가 없습니다.');
+        return;
+      }
+
+      if (section.style.display === 'none') {
+        section.style.display = 'block';
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        section.style.display = 'none';
+      }
+    }
+
+    function toggleFailedSection() {
+      const section = document.getElementById('failedSection');
+      const failedTCs = scenarios.filter(tc => results[tc.tcId]?.status === 'failed');
+
+      if (failedTCs.length === 0) {
+        alert('실패한 테스트 케이스가 없습니다.');
+        return;
+      }
+
+      if (section.style.display === 'none') {
+        section.style.display = 'block';
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        section.style.display = 'none';
+      }
+    }
+
+    // Track navigation history for back button
+    let modalHistory = [];
+
+    function openModal(tcId, fromGroup = null) {
+      const tc = scenarios.find(s => s.tcId === tcId);
+      const result = results[tcId];
+      const modal = document.getElementById('tcModal');
+      const body = document.getElementById('modalBody');
+
+      if (!tc) return;
+
+      // Track where we came from
+      if (fromGroup) {
+        modalHistory.push({ type: 'group', key: fromGroup });
+      }
+
+      const group = tc.group || extractGroup(tc.tcId);
+      const statusClass = result?.status || 'pending';
+      const statusIcon = getStatusIcon(result?.status);
+
+      body.innerHTML = `
+        ${modalHistory.length > 0 ? `
+          <button class="modal-back-btn" onclick="goBackModal()">
+            ← ${groupNames[group] || group} 목록으로
+          </button>
+        ` : ''}
+
+        <div class="modal-tc-id">${tc.tcId}</div>
+        <div class="modal-tc-name">${statusIcon} ${tc.name}</div>
+
+        <div class="modal-section">
+          <h4>그룹</h4>
+          <p>${groupNames[group] || group}</p>
+        </div>
+
+        <div class="modal-section">
+          <h4>상태</h4>
+          <p style="color: ${statusClass === 'passed' ? '#10b981' : statusClass === 'failed' ? '#ef4444' : '#888'}">
+            ${result?.status?.toUpperCase() || 'PENDING'}
+            ${result?.videoPath ? `<a href="file://${result.videoPath}" target="_blank" class="video-link" style="margin-left: 10px;">🎬 실패 영상 보기</a>` : ''}
+          </p>
+        </div>
+
+        ${result?.message ? `
+          <div class="modal-section">
+            <h4>오류 메시지</h4>
+            <p style="color: #ef4444; background: rgba(239,68,68,0.1); padding: 12px; border-radius: 6px;">${result.message}</p>
+            ${result.improvements && result.improvements.length > 0 ? `
+              <div class="improvement-box">
+                <h5>💡 개선 방향 <span class="llm-badge">AI 생성</span></h5>
+                <ul>
+                  ${result.improvements.map(i => `<li>${i}</li>`).join('')}
+                </ul>
+              </div>
+            ` : ''}
+          </div>
+        ` : ''}
+
+        <div class="modal-section">
+          <h4>테스트 단계 (${tc.steps.length})</h4>
+          <ul class="steps-list" style="max-height: 300px;">
+            ${tc.steps.map((step, idx) => {
+              const stepResult = result?.steps?.[idx];
+              const stepStatusClass = stepResult?.status || '';
+              return `
+                <li class="step-item ${stepStatusClass}">
+                  <div class="step-number">${idx + 1}</div>
+                  <div class="step-content">
+                    <div class="step-name">${step}</div>
+                    ${stepResult?.message ? `
+                      <div class="step-message ${stepResult.status === 'failed' ? 'error' : ''}">${stepResult.message}</div>
+                      ${stepResult.improvements && stepResult.improvements.length > 0 ? `
+                        <div class="improvement-box" style="margin-top: 10px;">
+                          <h5>💡 개선 방향 <span class="llm-badge">AI 생성</span></h5>
+                          <ul>
+                            ${stepResult.improvements.map(i => `<li>${i}</li>`).join('')}
+                          </ul>
+                        </div>
+                      ` : ''}
+                    ` : ''}
+                  </div>
+                </li>
+              `;
+            }).join('')}
+          </ul>
+        </div>
+      `;
+
+      modal.classList.add('active');
+    }
+
+    // 개선 방안은 이제 e2e-tester 에이전트가 테스트 결과와 함께 생성하여 전송
+    // 대시보드는 표시만 담당
+
+    // Generate improvement suggestions based on error patterns
+    function getImprovementSuggestions(message) {
+      const suggestions = [];
+      const msg = message.toLowerCase();
+
+      // ref 매칭 실패
+      if (msg.includes('ref') || msg.includes('매칭') || msg.includes('찾을 수 없')) {
+        suggestions.push('시나리오의 셀렉터 설명을 더 구체적으로 수정 (예: "저장 버튼" → "팝업 하단의 저장 버튼")');
+        suggestions.push('<code>browser_snapshot()</code> 결과에서 실제 요소의 ref 값 확인 후 시나리오 업데이트');
+        suggestions.push('요소가 로딩 중일 수 있음 - <code>browser_wait_for()</code>로 대기 시간 추가');
+      }
+
+      // 요소 없음
+      if (msg.includes('element') || msg.includes('요소') || msg.includes('필드')) {
+        suggestions.push('페이지 DOM 구조가 변경되었을 수 있음 - FE 코드 확인 필요');
+        suggestions.push('요소가 동적으로 생성되는 경우 <code>wait</code> 액션 추가');
+        suggestions.push('조건부 렌더링(v-if)으로 인해 요소가 숨겨져 있을 수 있음');
+      }
+
+      // 타임아웃
+      if (msg.includes('timeout') || msg.includes('시간') || msg.includes('초과')) {
+        suggestions.push('네트워크 지연 - API 응답 대기 시간 증가 필요');
+        suggestions.push('<code>browser_wait_for(time=5)</code>로 대기 시간 늘리기');
+        suggestions.push('서버 상태 확인 - API 서버가 정상 동작하는지 체크');
+      }
+
+      // 클릭 실패
+      if (msg.includes('click') || msg.includes('클릭')) {
+        suggestions.push('요소가 다른 요소에 가려져 있을 수 있음 - 스크롤 또는 팝업 닫기 필요');
+        suggestions.push('<code>browser_hover()</code>로 먼저 요소 위에 마우스 이동');
+        suggestions.push('요소가 비활성화(disabled) 상태인지 확인');
+      }
+
+      // 텍스트/값 불일치
+      if (msg.includes('text') || msg.includes('값') || msg.includes('일치') || msg.includes('메시지')) {
+        suggestions.push('예상 텍스트와 실제 텍스트가 다름 - 시나리오의 기대값 확인');
+        suggestions.push('다국어/번역으로 인한 텍스트 변경 가능성 체크');
+        suggestions.push('공백, 줄바꿈 등 보이지 않는 문자 차이 확인');
+      }
+
+      // URL/네비게이션
+      if (msg.includes('url') || msg.includes('navigate') || msg.includes('페이지')) {
+        suggestions.push('URL 형식 확인 - 상대경로 vs 절대경로');
+        suggestions.push('인증/권한 문제로 리다이렉트되었을 수 있음');
+        suggestions.push('config.json의 <code>test_server.fe_url</code> 값 확인');
+      }
+
+      // 인증 관련
+      if (msg.includes('auth') || msg.includes('인증') || msg.includes('로그인') || msg.includes('token')) {
+        suggestions.push('JWT 토큰 만료 - <code>e2e_check_auth</code>로 인증 상태 확인');
+        suggestions.push('세션/쿠키가 유효한지 확인');
+        suggestions.push('테스트 전 로그인 단계가 정상 완료되었는지 체크');
+      }
+
+      // 기본 제안
+      if (suggestions.length === 0) {
+        suggestions.push('브라우저 스냅샷을 확인하여 현재 페이지 상태 파악');
+        suggestions.push('이전 스텝들이 정상 완료되었는지 확인');
+        suggestions.push('수동으로 동일 시나리오 재현하여 문제 원인 파악');
+      }
+
+      return suggestions;
+    }
+
+    // Go back to previous modal
+    function goBackModal() {
+      const prev = modalHistory.pop();
+      if (prev && prev.type === 'group') {
+        closeModal();
+        openGroupModal(prev.key);
+      }
+    }
+
+    function closeModal() {
+      document.getElementById('tcModal').classList.remove('active');
+    }
+
+    // Close modal on overlay click
+    document.getElementById('tcModal').addEventListener('click', (e) => {
+      if (e.target.classList.contains('modal-overlay')) {
+        closeModal();
+      }
+    });
+
+    // Group Detail Modal Functions
+    let currentGroupTab = 'all';
+
+    function openGroupModal(groupKey) {
+      const groups = getGroupedScenarios();
+      const group = groups[groupKey];
+      if (!group) return;
+
+      const modal = document.getElementById('groupModal');
+      const body = document.getElementById('groupModalBody');
+
+      // Calculate pass rate
+      const passRate = group.stats.total > 0
+        ? Math.round((group.stats.passed / group.stats.total) * 100)
+        : 0;
+
+      body.innerHTML = `
+        <div class="group-detail-header">
+          <span class="group-detail-name">${group.name}</span>
+          <span class="group-detail-badge" style="background: ${passRate >= 80 ? '#10b981' : passRate >= 50 ? '#f59e0b' : '#ef4444'}; color: white;">
+            ${passRate}% 통과
+          </span>
+        </div>
+
+        <div class="group-detail-stats">
+          <div class="group-stat-card total">
+            <div class="value">${group.stats.total}</div>
+            <div class="label">전체</div>
+          </div>
+          <div class="group-stat-card passed">
+            <div class="value">${group.stats.passed}</div>
+            <div class="label">성공</div>
+          </div>
+          <div class="group-stat-card failed">
+            <div class="value">${group.stats.failed}</div>
+            <div class="label">실패</div>
+          </div>
+          <div class="group-stat-card pending">
+            <div class="value">${group.stats.pending}</div>
+            <div class="label">대기</div>
+          </div>
+        </div>
+
+        <div class="group-detail-tabs">
+          <button class="group-detail-tab active" onclick="switchGroupTab('${groupKey}', 'all')">
+            전체 <span class="count">${group.stats.total}</span>
+          </button>
+          <button class="group-detail-tab" onclick="switchGroupTab('${groupKey}', 'passed')">
+            성공 <span class="count">${group.stats.passed}</span>
+          </button>
+          <button class="group-detail-tab" onclick="switchGroupTab('${groupKey}', 'failed')">
+            실패 <span class="count">${group.stats.failed}</span>
+          </button>
+          <button class="group-detail-tab" onclick="switchGroupTab('${groupKey}', 'pending')">
+            대기 <span class="count">${group.stats.pending}</span>
+          </button>
+        </div>
+
+        <div id="groupTCList">
+          ${renderGroupDetailTCs(group.scenarios, 'all')}
+        </div>
+      `;
+
+      currentGroupTab = 'all';
+      modal.classList.add('active');
+    }
+
+    function switchGroupTab(groupKey, tab) {
+      const groups = getGroupedScenarios();
+      const group = groups[groupKey];
+      if (!group) return;
+
+      currentGroupTab = tab;
+
+      // Update tab active states
+      document.querySelectorAll('.group-detail-tab').forEach(tabEl => {
+        tabEl.classList.remove('active');
+      });
+      event.target.closest('.group-detail-tab').classList.add('active');
+
+      // Update TC list
+      document.getElementById('groupTCList').innerHTML = renderGroupDetailTCs(group.scenarios, tab);
+    }
+
+    function renderGroupDetailTCs(groupScenarios, filter) {
+      let filteredTCs = groupScenarios;
+
+      if (filter !== 'all') {
+        filteredTCs = groupScenarios.filter(tc => {
+          const result = results[tc.tcId];
+          if (filter === 'passed') return result?.status === 'passed';
+          if (filter === 'failed') return result?.status === 'failed';
+          if (filter === 'pending') return !result || (result.status !== 'passed' && result.status !== 'failed' && result.status !== 'running');
+          return true;
+        });
+      }
+
+      if (filteredTCs.length === 0) {
+        const emptyMsg = {
+          'all': '테스트 케이스가 없습니다',
+          'passed': '성공한 테스트가 없습니다',
+          'failed': '실패한 테스트가 없습니다',
+          'pending': '대기 중인 테스트가 없습니다'
+        };
+        const emptyIcon = {
+          'all': '📋',
+          'passed': '✅',
+          'failed': '❌',
+          'pending': '⏳'
+        };
+        return `
+          <div class="empty-tab-state">
+            <div class="icon">${emptyIcon[filter]}</div>
+            <div>${emptyMsg[filter]}</div>
+          </div>
+        `;
+      }
+
+      return `
+        <ul class="group-tc-list">
+          ${filteredTCs.map(tc => {
+            const result = results[tc.tcId];
+            const status = result?.status || 'pending';
+            const icon = getStatusIcon(status);
+            const message = result?.message || '';
+
+            return `
+              <li class="group-tc-item ${status}" onclick="closeGroupModal(); openModal('${tc.tcId}');">
+                <div class="group-tc-icon">${icon}</div>
+                <div class="group-tc-content">
+                  <div class="group-tc-id">${tc.tcId}</div>
+                  <div class="group-tc-name">${tc.name}</div>
+                  ${message ? `<div class="group-tc-message ${status === 'failed' ? 'error' : ''}">${message}</div>` : ''}
+                </div>
+              </li>
+            `;
+          }).join('')}
+        </ul>
+      `;
+    }
+
+    function closeGroupModal() {
+      document.getElementById('groupModal').classList.remove('active');
+    }
+
+    // Close group modal on overlay click
+    document.getElementById('groupModal').addEventListener('click', (e) => {
+      if (e.target.classList.contains('modal-overlay')) {
+        closeGroupModal();
+      }
+    });
+
+    // =============================================
+    // localStorage 이력 관리
+    // =============================================
+    const STORAGE_KEY = 'e2e-dashboard-history';
+    const MAX_HISTORY = 10;  // 최대 저장 이력 수
+    let currentSessionId = null;  // 현재 세션 ID
+
+    // 현재 상태를 localStorage에 저장
+    function saveToLocalStorage() {
+      if (scenarios.length === 0) return;
+
+      const history = getHistory();
+      const timestamp = new Date().toISOString();
+
+      // 완료율 계산
+      const total = scenarios.length;
+      let completed = 0;
+      Object.values(results).forEach(r => {
+        if (r.status === 'passed' || r.status === 'failed') completed++;
+      });
+      const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+      // 현재 세션이 있으면 업데이트, 없으면 새로 생성
+      if (currentSessionId) {
+        const existingIndex = history.findIndex(h => h.id === currentSessionId);
+        if (existingIndex >= 0) {
+          history[existingIndex] = {
+            ...history[existingIndex],
+            projectName,
+            scenarios,
+            results,
+            groupNames,
+            currentTC,
+            completionRate,
+            timestamp,  // 이력 페이지 호환
+            updatedAt: timestamp
+          };
+        } else {
+          // ID가 있지만 이력에 없는 경우 (삭제된 경우)
+          currentSessionId = generateSessionId();
+          history.unshift({
+            id: currentSessionId,
+            projectName,
+            scenarios,
+            results,
+            groupNames,
+            currentTC,
+            completionRate,
+            timestamp,  // 이력 페이지 호환
+            createdAt: timestamp,
+            updatedAt: timestamp
+          });
+        }
+      } else {
+        // 새 세션 생성
+        currentSessionId = generateSessionId();
+        history.unshift({
+          id: currentSessionId,
+          projectName,
+          scenarios,
+          results,
+          groupNames,
+          currentTC,
+          completionRate,
+          timestamp,  // 이력 페이지 호환
+          createdAt: timestamp,
+          updatedAt: timestamp
+        });
+      }
+
+      // 최대 개수 제한
+      while (history.length > MAX_HISTORY) {
+        history.pop();
+      }
+
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+
+      // 저장 표시
+      showSavedIndicator();
+    }
+
+    function generateSessionId() {
+      return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    }
+
+    function getHistory() {
+      try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    // 같은 프로젝트의 최근 미완료 세션 찾기 (오늘 생성된 것만)
+    function findRecentSessionForProject(project) {
+      if (!project) return null;
+
+      const history = getHistory();
+      const today = new Date().toISOString().split('T')[0];  // YYYY-MM-DD
+
+      // 같은 프로젝트, 오늘 날짜, 미완료(100% 미만) 세션 찾기
+      const recentSession = history.find(h => {
+        const sessionDate = h.createdAt?.split('T')[0] || h.timestamp?.split('T')[0];
+        return h.projectName === project &&
+               sessionDate === today &&
+               (h.completionRate || 0) < 100;
+      });
+
+      return recentSession?.id || null;
+    }
+
+    function showSavedIndicator() {
+      const indicator = document.getElementById('savedIndicator');
+      indicator.style.display = 'inline-block';
+      setTimeout(() => {
+        indicator.style.display = 'none';
+      }, 2000);
+    }
+
+    // 이력에서 복원
+    async function restoreFromHistory(sessionId) {
+      const history = getHistory();
+      const session = history.find(h => h.id === sessionId);
+
+      if (!session) {
+        alert('이력을 찾을 수 없습니다.');
+        return;
+      }
+
+      // 상태 복원
+      scenarios = session.scenarios || [];
+      results = session.results || {};
+      groupNames = session.groupNames || {};
+      projectName = session.projectName || '';
+      currentTC = session.currentTC;
+      currentSessionId = sessionId;
+
+      // UI 업데이트
+      renderGroupedTCList();
+      updateStats();
+      updateCharts();
+      renderFailedTCs();
+      renderPendingTCs();
+
+      if (currentTC) {
+        selectTC(currentTC);
+      } else {
+        document.getElementById('currentTCId').textContent = '-';
+        document.getElementById('currentTCName').textContent = '테스트 이력에서 복원됨';
+        document.getElementById('stepsList').innerHTML = `
+          <li class="empty-state">
+            <div class="empty-state-icon">📂</div>
+            <div>이력에서 복원됨 - TC 선택하세요</div>
+          </li>
+        `;
+      }
+
+      closeHistoryModal();
+
+      // 서버에 복원된 결과 전송
+      try {
+        const response = await fetch('/api/restore-results', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scenarios, results, groupNames, projectName })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          console.log('[RESTORE] 서버에 결과 복원됨:', data.restored);
+
+          // 미완료 TC가 있으면 테스트 실행 여부 확인
+          if (data.restored.pendingTCs > 0) {
+            showResumeTestModal(data.restored);
+          } else {
+            document.getElementById('connectionStatus').textContent = '이력 복원됨 (완료)';
+            document.getElementById('connectionStatus').className = 'status-badge status-connected';
+          }
+        } else {
+          console.error('[RESTORE] 서버 복원 실패:', data.error);
+          alert('서버에 결과 복원 실패: ' + data.error);
+        }
+      } catch (err) {
+        console.error('[RESTORE] 서버 통신 오류:', err);
+        alert('서버 통신 오류: ' + err.message);
+      }
+
+      // 연결 상태 업데이트
+      const allDone = scenarios.every(s =>
+        results[s.tcId] && (results[s.tcId].status === 'passed' || results[s.tcId].status === 'failed')
+      );
+
+      if (allDone) {
+        document.getElementById('connectionStatus').textContent = '이력 복원됨 (완료)';
+        document.getElementById('connectionStatus').className = 'status-badge status-connected';
+      } else {
+        document.getElementById('connectionStatus').textContent = '이력 복원됨 (대기중)';
+        document.getElementById('connectionStatus').className = 'status-badge status-connected';
+      }
+    }
+
+    // 테스트 재개 모달 표시
+    function showResumeTestModal(restored) {
+      const modal = document.createElement('div');
+      modal.id = 'resumeTestModal';
+      modal.className = 'modal';
+      modal.innerHTML = `
+        <div class="modal-content" style="max-width: 500px;">
+          <div class="modal-header">
+            <h2>테스트 재개</h2>
+            <button class="modal-close" onclick="closeResumeTestModal()">&times;</button>
+          </div>
+          <div class="modal-body" style="text-align: center; padding: 20px;">
+            <div style="font-size: 48px; margin-bottom: 16px;">🔄</div>
+            <p style="font-size: 16px; margin-bottom: 12px;">
+              <strong>${restored.totalTCs}개</strong> 중 <strong>${restored.completedTCs}개</strong> 완료 (${restored.completionRate}%)
+            </p>
+            <p style="color: #f39c12; font-size: 14px; margin-bottom: 20px;">
+              미완료 TC: <strong>${restored.pendingTCs}개</strong>
+            </p>
+            ${restored.nextTC ? `
+              <p style="color: #666; font-size: 13px; margin-bottom: 20px;">
+                다음 TC: ${restored.nextTC.tcId} - ${restored.nextTC.name}
+              </p>
+            ` : ''}
+            <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+              <button onclick="triggerE2ETest()" style="
+                background: #27ae60; color: white; border: none; padding: 12px 24px;
+                border-radius: 8px; font-size: 14px; cursor: pointer; font-weight: 600;
+              ">▶️ 자동 실행</button>
+              <button onclick="copyE2ECommand()" style="
+                background: #3498db; color: white; border: none; padding: 12px 24px;
+                border-radius: 8px; font-size: 14px; cursor: pointer; font-weight: 600;
+              ">📋 명령어 복사</button>
+              <button onclick="closeResumeTestModal()" style="
+                background: #95a5a6; color: white; border: none; padding: 12px 24px;
+                border-radius: 8px; font-size: 14px; cursor: pointer;
+              ">나중에</button>
+            </div>
+            <p style="color: #999; font-size: 11px; margin-top: 16px;">
+              * 자동 실행: 서버가 CLI에 테스트 실행 신호를 보냅니다<br>
+              * 명령어 복사: CLI에서 /e2e-test 를 직접 실행하세요
+            </p>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      modal.style.display = 'flex';
+    }
+
+    function closeResumeTestModal() {
+      const modal = document.getElementById('resumeTestModal');
+      if (modal) modal.remove();
+    }
+
+    // CLI 명령어 복사
+    function copyE2ECommand() {
+      navigator.clipboard.writeText('/e2e-test').then(() => {
+        alert('명령어가 복사되었습니다. CLI에서 붙여넣기하세요.');
+        closeResumeTestModal();
+      }).catch(err => {
+        prompt('아래 명령어를 복사하세요:', '/e2e-test');
+      });
+    }
+
+    // E2E 테스트 자동 트리거
+    async function triggerE2ETest() {
+      try {
+        const response = await fetch('/api/trigger-e2e-test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          closeResumeTestModal();
+          document.getElementById('connectionStatus').textContent = '테스트 트리거됨';
+          document.getElementById('connectionStatus').className = 'status-badge status-connected';
+
+          // 알림 표시
+          const notification = document.createElement('div');
+          notification.style.cssText = `
+            position: fixed; top: 20px; right: 20px; background: #27ae60; color: white;
+            padding: 16px 24px; border-radius: 8px; font-size: 14px; z-index: 10001;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3); animation: slideIn 0.3s ease;
+          `;
+          notification.innerHTML = `
+            <strong>✅ 테스트 트리거 완료</strong><br>
+            <span style="font-size: 12px;">CLI에서 테스트가 곧 시작됩니다...</span>
+          `;
+          document.body.appendChild(notification);
+          setTimeout(() => notification.remove(), 5000);
+        } else {
+          alert('테스트 트리거 실패: ' + (data.error || data.message));
+        }
+      } catch (err) {
+        console.error('[TRIGGER] 오류:', err);
+        alert('테스트 트리거 오류: ' + err.message + '\n\nCLI에서 /e2e-test 를 직접 실행하세요.');
+      }
+    }
+
+    // 특정 이력 삭제
+    function deleteFromHistory(sessionId) {
+      if (!confirm('이 이력을 삭제하시겠습니까?')) return;
+
+      let history = getHistory();
+      history = history.filter(h => h.id !== sessionId);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+
+      // 현재 세션이 삭제된 경우
+      if (currentSessionId === sessionId) {
+        currentSessionId = null;
+      }
+
+      showHistoryModal();  // 모달 갱신
+    }
+
+    // 모든 이력 삭제
+    function clearAllHistory() {
+      if (!confirm('모든 이력을 삭제하시겠습니까?')) return;
+
+      localStorage.removeItem(STORAGE_KEY);
+      currentSessionId = null;
+      showHistoryModal();  // 모달 갱신
+    }
+
+    // 이력 모달 표시
+    function showHistoryModal() {
+      const modal = document.getElementById('historyModal');
+      const body = document.getElementById('historyModalBody');
+      const history = getHistory();
+
+      if (history.length === 0) {
+        body.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">📂</div>
+            <div>저장된 이력이 없습니다</div>
+            <p style="color: #666; font-size: 13px; margin-top: 10px;">테스트를 실행하면 자동으로 저장됩니다</p>
+          </div>
+        `;
+      } else {
+        // 프로젝트별로 그룹화
+        const groupedByProject = {};
+        history.forEach(session => {
+          const projKey = session.projectName || '(프로젝트명 없음)';
+          if (!groupedByProject[projKey]) {
+            groupedByProject[projKey] = [];
+          }
+          groupedByProject[projKey].push(session);
+        });
+
+        let html = `
+          <div class="history-actions">
+            <span style="color: #888; font-size: 13px;">총 ${history.length}개의 이력</span>
+            <button class="btn-clear-all" onclick="clearAllHistory()">🗑️ 전체 삭제</button>
+          </div>
+        `;
+
+        Object.entries(groupedByProject).forEach(([projName, sessions]) => {
+          html += `
+            <div style="margin-bottom: 20px;">
+              <h4 style="color: #667eea; font-size: 14px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #333;">
+                📁 ${projName}
+                <span style="color: #888; font-size: 12px; font-weight: normal; margin-left: 10px;">${sessions.length}개</span>
+              </h4>
+              <ul class="history-list">
+                ${sessions.map(session => {
+                  const createdAt = new Date(session.createdAt).toLocaleString('ko-KR');
+                  const dateOnly = new Date(session.createdAt).toLocaleDateString('ko-KR');
+                  const timeOnly = new Date(session.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+                  const total = session.scenarios?.length || 0;
+                  let passed = 0, failed = 0, running = 0;
+
+                  if (session.results) {
+                    Object.values(session.results).forEach(r => {
+                      if (r.status === 'passed') passed++;
+                      else if (r.status === 'failed') failed++;
+                      else if (r.status === 'running') running++;
+                    });
+                  }
+
+                  const pending = total - passed - failed - running;
+                  const isCurrent = session.id === currentSessionId;
+
+                  // 완료율 (저장된 값 또는 재계산)
+                  const completionRate = session.completionRate !== undefined
+                    ? session.completionRate
+                    : (total > 0 ? Math.round(((passed + failed) / total) * 100) : 0);
+
+                  // 완료율에 따른 색상
+                  const rateColor = completionRate === 100 ? '#10b981' : completionRate >= 50 ? '#f59e0b' : '#ef4444';
+
+                  return `
+                    <li class="history-item" ${isCurrent ? 'style="border-left-color: #10b981;"' : ''}>
+                      <div class="info">
+                        <div class="date" style="display: flex; align-items: center; gap: 10px;">
+                          <span>📅 ${dateOnly} ${timeOnly}</span>
+                          ${isCurrent ? '<span class="history-current-badge">현재</span>' : ''}
+                          <span style="background: ${rateColor}; color: white; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;">
+                            ${completionRate}% 완료
+                          </span>
+                        </div>
+                        <div class="stats" style="margin-top: 8px;">
+                          <span class="stat">📋 ${total}</span>
+                          <span class="stat passed">✅ ${passed}</span>
+                          <span class="stat failed">❌ ${failed}</span>
+                          <span class="stat">⏳ ${pending}</span>
+                        </div>
+                      </div>
+                      <div class="actions">
+                        ${!isCurrent ? `<button class="btn-restore" onclick="restoreFromHistory('${session.id}')">이어서 테스트</button>` : ''}
+                        <button class="btn-delete" onclick="deleteFromHistory('${session.id}')">삭제</button>
+                      </div>
+                    </li>
+                  `;
+                }).join('')}
+              </ul>
+            </div>
+          `;
+        });
+
+        body.innerHTML = html;
+      }
+
+      modal.classList.add('active');
+    }
+
+    function closeHistoryModal() {
+      document.getElementById('historyModal').classList.remove('active');
+    }
+
+    // Close history modal on overlay click
+    document.getElementById('historyModal').addEventListener('click', (e) => {
+      if (e.target.classList.contains('modal-overlay')) {
+        closeHistoryModal();
+      }
+    });
+
+    // 결과 변경 시 자동 저장 (디바운스 적용)
+    let saveTimeout = null;
+    function autoSave() {
+      if (saveTimeout) clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(() => {
+        saveToLocalStorage();
+      }, 1000);  // 1초 디바운스
+    }
+
+    // HTML 이스케이프 함수
+    function escapeHtml(text) {
+      if (!text) return '';
+      return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    // HTML 리포트 다운로드
+    function openReport() {
+      // 요약 통계 계산
+      const total = scenarios.length;
+      let passed = 0, failed = 0, pending = 0;
+      Object.values(results).forEach(r => {
+        if (r.status === 'passed') passed++;
+        else if (r.status === 'failed') failed++;
+        else if (r.status === 'pending') pending++;
+      });
+      const waiting = total - passed - failed - pending;
+      const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
+
+      const groups = getGroupedScenarios();
+      const reportDate = new Date().toLocaleString('ko-KR');
+      const dateStr = new Date().toISOString().split('T')[0];
+
+      // 그룹별 데이터
+      const groupLabels = Object.values(groups).map(g => g.name);
+      const groupPassed = Object.values(groups).map(g => g.stats.passed);
+      const groupFailed = Object.values(groups).map(g => g.stats.failed);
+      const groupPending = Object.values(groups).map(g => g.stats.pending);
+      const groupWaiting = Object.values(groups).map(g =>
+        g.stats.total - g.stats.passed - g.stats.failed - g.stats.pending
+      );
+
+      // 실패/보류 케이스
+      const failedTCs = scenarios.filter(tc => results[tc.tcId]?.status === 'failed');
+      const pendingTCs = scenarios.filter(tc => results[tc.tcId]?.status === 'pending');
+
+      // 실패 케이스 HTML 생성
+      let failedHtml = '';
+      if (failedTCs.length > 0) {
+        let rows = '';
+        failedTCs.forEach(tc => {
+          const result = results[tc.tcId];
+          rows += '<tr><td><strong>' + escapeHtml(tc.tcId) + '</strong></td><td>' + escapeHtml(tc.name) + '</td><td><span class="status failed">실패</span></td><td class="error-msg">' + escapeHtml(result?.message || '-') + '</td></tr>';
+        });
+        failedHtml = '<div class="section"><h3>실패 케이스 <span class="badge">' + failedTCs.length + '건</span></h3><table><thead><tr><th style="width:150px">TC ID</th><th>테스트명</th><th style="width:120px">상태</th><th>에러 메시지</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+      }
+
+      // 보류 케이스 HTML 생성
+      let pendingHtml = '';
+      if (pendingTCs.length > 0) {
+        let rows = '';
+        pendingTCs.forEach(tc => {
+          const result = results[tc.tcId];
+          rows += '<tr><td><strong>' + escapeHtml(tc.tcId) + '</strong></td><td>' + escapeHtml(tc.name) + '</td><td><span class="status pending">보류</span></td><td>' + escapeHtml(result?.message || '-') + '</td></tr>';
+        });
+        pendingHtml = '<div class="section"><h3>보류 케이스 <span class="badge pending">' + pendingTCs.length + '건</span></h3><table><thead><tr><th style="width:150px">TC ID</th><th>테스트명</th><th style="width:120px">상태</th><th>사유</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+      }
+
+      // 그룹별 상세 HTML 생성
+      let groupsHtml = '';
+      Object.entries(groups).forEach(function([key, group]) {
+        const rate = group.stats.total > 0 ? Math.round((group.stats.passed / group.stats.total) * 100) : 0;
+        let rows = '';
+        group.scenarios.forEach(function(tc) {
+          const result = results[tc.tcId];
+          const status = result?.status || 'waiting';
+          const statusText = status === 'passed' ? '성공' : status === 'failed' ? '실패' : status === 'pending' ? '보류' : '대기';
+          rows += '<tr><td><strong>' + escapeHtml(tc.tcId) + '</strong></td><td>' + escapeHtml(tc.name) + '</td><td><span class="status ' + status + '">' + statusText + '</span></td></tr>';
+        });
+        groupsHtml += '<div class="group-table"><div class="group-header"><span>' + escapeHtml(group.name) + '</span><span class="rate">' + group.stats.passed + '/' + group.stats.total + ' (' + rate + '%)</span></div><table><thead><tr><th style="width:150px">TC ID</th><th>테스트명</th><th style="width:100px">상태</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+      });
+
+      const html = '<!DOCTYPE html>' +
+'<html lang="ko">' +
+'<head>' +
+'  <meta charset="UTF-8">' +
+'  <meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+'  <title>E2E 테스트 리포트 - ' + dateStr + '</title>' +
+'  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"><\/script>' +
+'  <style>' +
+'    * { box-sizing: border-box; margin: 0; padding: 0; }' +
+'    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; padding: 40px; max-width: 1200px; margin: 0 auto; }' +
+'    .header { text-align: center; margin-bottom: 40px; padding-bottom: 20px; border-bottom: 3px solid #667eea; }' +
+'    .header h1 { font-size: 32px; color: #667eea; margin-bottom: 10px; }' +
+'    .header .date { color: #666; font-size: 14px; }' +
+'    .summary-cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 20px; margin-bottom: 40px; }' +
+'    .card { background: white; border-radius: 12px; padding: 25px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }' +
+'    .card .value { font-size: 42px; font-weight: 700; margin-bottom: 5px; }' +
+'    .card .label { font-size: 14px; color: #666; text-transform: uppercase; }' +
+'    .card.total .value { color: #667eea; }' +
+'    .card.passed .value { color: #10b981; }' +
+'    .card.failed .value { color: #ef4444; }' +
+'    .card.pending .value { color: #f59e0b; }' +
+'    .card.rate .value { color: #8b5cf6; }' +
+'    .charts-row { display: grid; grid-template-columns: 1fr 2fr; gap: 30px; margin-bottom: 40px; }' +
+'    .chart-container { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }' +
+'    .chart-container h3 { margin-bottom: 20px; color: #333; font-size: 18px; }' +
+'    .chart-wrapper { position: relative; height: 300px; }' +
+'    .section { background: white; border-radius: 12px; padding: 25px; margin-bottom: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }' +
+'    .section h3 { margin-bottom: 20px; color: #333; font-size: 18px; display: flex; align-items: center; gap: 10px; }' +
+'    .section h3 .badge { background: #ef4444; color: white; padding: 4px 10px; border-radius: 12px; font-size: 12px; }' +
+'    .section h3 .badge.pending { background: #f59e0b; }' +
+'    table { width: 100%; border-collapse: collapse; }' +
+'    th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; }' +
+'    th { background: #f8f9fa; font-weight: 600; color: #555; }' +
+'    tr:hover { background: #f8f9fa; }' +
+'    .status { display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; }' +
+'    .status.passed { background: #d1fae5; color: #059669; }' +
+'    .status.failed { background: #fee2e2; color: #dc2626; }' +
+'    .status.pending { background: #fef3c7; color: #d97706; }' +
+'    .status.waiting { background: #e5e7eb; color: #6b7280; }' +
+'    .error-msg { color: #ef4444; font-size: 13px; max-width: 400px; }' +
+'    .group-table { margin-bottom: 25px; }' +
+'    .group-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 20px; border-radius: 8px 8px 0 0; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }' +
+'    .group-header .rate { background: rgba(255,255,255,0.2); padding: 4px 12px; border-radius: 12px; font-size: 14px; }' +
+'    .print-btn { position: fixed; bottom: 30px; right: 30px; background: #667eea; color: white; border: none; padding: 15px 25px; border-radius: 30px; font-size: 16px; cursor: pointer; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4); }' +
+'    .print-btn:hover { background: #5a6fd6; }' +
+'    @media print { body { padding: 20px; } .print-btn { display: none; } .chart-container, .section { break-inside: avoid; } }' +
+'  </style>' +
+'</head>' +
+'<body>' +
+'  <div class="header">' +
+'    <h1>E2E 테스트 리포트</h1>' +
+'    <div class="date">생성일시: ' + reportDate + '</div>' +
+'  </div>' +
+'  <div class="summary-cards">' +
+'    <div class="card total"><div class="value">' + total + '</div><div class="label">전체</div></div>' +
+'    <div class="card passed"><div class="value">' + passed + '</div><div class="label">성공</div></div>' +
+'    <div class="card failed"><div class="value">' + failed + '</div><div class="label">실패</div></div>' +
+'    <div class="card pending"><div class="value">' + (pending + waiting) + '</div><div class="label">보류/대기</div></div>' +
+'    <div class="card rate"><div class="value">' + passRate + '%</div><div class="label">통과율</div></div>' +
+'  </div>' +
+'  <div class="charts-row">' +
+'    <div class="chart-container"><h3>테스트 결과 분포</h3><div class="chart-wrapper"><canvas id="pieChart"></canvas></div></div>' +
+'    <div class="chart-container"><h3>그룹별 테스트 현황</h3><div class="chart-wrapper"><canvas id="barChart"></canvas></div></div>' +
+'  </div>' +
+failedHtml +
+pendingHtml +
+'  <div class="section"><h3>그룹별 상세 결과</h3>' + groupsHtml + '</div>' +
+'  <button class="print-btn" onclick="window.print()">PDF로 저장</button>' +
+'  <script>' +
+'    new Chart(document.getElementById("pieChart"), { type: "doughnut", data: { labels: ["성공", "실패", "보류", "대기"], datasets: [{ data: [' + passed + ', ' + failed + ', ' + pending + ', ' + waiting + '], backgroundColor: ["#10b981", "#ef4444", "#f59e0b", "#9ca3af"], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom", labels: { padding: 20, font: { size: 13 } } } }, cutout: "60%" } });' +
+'    new Chart(document.getElementById("barChart"), { type: "bar", data: { labels: ' + JSON.stringify(groupLabels) + ', datasets: [ { label: "성공", data: ' + JSON.stringify(groupPassed) + ', backgroundColor: "#10b981" }, { label: "실패", data: ' + JSON.stringify(groupFailed) + ', backgroundColor: "#ef4444" }, { label: "보류", data: ' + JSON.stringify(groupPending) + ', backgroundColor: "#f59e0b" }, { label: "대기", data: ' + JSON.stringify(groupWaiting) + ', backgroundColor: "#9ca3af" } ] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom", labels: { padding: 15, font: { size: 12 } } } }, scales: { x: { stacked: true, ticks: { font: { size: 11 }, maxRotation: 45, minRotation: 45 } }, y: { stacked: true, beginAtZero: true } } } });' +
+'  <\/script>' +
+'</body>' +
+'</html>';
+
+      // HTML 파일로 다운로드
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'e2e-test-report-' + dateStr + '.html';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      console.log('Report downloaded:', a.download);
+    }
+
+    async function downloadPdf() {
+      // 요약 통계 계산
+      const total = scenarios.length;
+      let passed = 0, failed = 0, pending = 0;
+      Object.values(results).forEach(r => {
+        if (r.status === 'passed') passed++;
+        else if (r.status === 'failed') failed++;
+        else if (r.status === 'pending') pending++;
+      });
+      const waiting = total - passed - failed - pending;
+      const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
+
+      const groups = getGroupedScenarios();
+      const reportDate = new Date().toLocaleString('ko-KR');
+      const dateStr = new Date().toISOString().split('T')[0];
+
+      // 그룹별 데이터
+      const groupLabels = Object.values(groups).map(g => g.name);
+      const groupPassed = Object.values(groups).map(g => g.stats.passed);
+      const groupFailed = Object.values(groups).map(g => g.stats.failed);
+      const groupPending = Object.values(groups).map(g => g.stats.pending);
+      const groupWaiting = Object.values(groups).map(g =>
+        g.stats.total - g.stats.passed - g.stats.failed - g.stats.pending
+      );
+
+      // 실패/보류 케이스
+      const failedTCs = scenarios.filter(tc => results[tc.tcId]?.status === 'failed');
+      const pendingTCs = scenarios.filter(tc => results[tc.tcId]?.status === 'pending');
+
+      // 임시 컨테이너 생성
+      const container = document.createElement('div');
+      container.id = 'pdf-container';
+      container.style.cssText = 'position: fixed; top: 0; left: 0; width: 210mm; background: white; padding: 20px; z-index: 9999; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;';
+
+      // 실패 케이스 HTML
+      let failedHtml = '';
+      if (failedTCs.length > 0) {
+        let rows = '';
+        failedTCs.forEach(tc => {
+          const result = results[tc.tcId];
+          rows += '<tr style="border-bottom: 1px solid #eee;"><td style="padding: 8px; font-weight: bold;">' + escapeHtml(tc.tcId) + '</td><td style="padding: 8px;">' + escapeHtml(tc.name) + '</td><td style="padding: 8px;"><span style="background: #fee2e2; color: #dc2626; padding: 2px 8px; border-radius: 10px; font-size: 11px;">실패</span></td><td style="padding: 8px; color: #ef4444; font-size: 12px; max-width: 200px; word-break: break-all;">' + escapeHtml(result?.message || '-') + '</td></tr>';
+        });
+        failedHtml = '<div style="margin-bottom: 20px;"><h3 style="font-size: 14px; margin-bottom: 10px; color: #ef4444;">❌ 실패 케이스 (' + failedTCs.length + '건)</h3><table style="width: 100%; border-collapse: collapse; font-size: 11px;"><thead><tr style="background: #f8f9fa;"><th style="padding: 8px; text-align: left; width: 100px;">TC ID</th><th style="padding: 8px; text-align: left;">테스트명</th><th style="padding: 8px; text-align: left; width: 60px;">상태</th><th style="padding: 8px; text-align: left;">에러</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+      }
+
+      // 보류 케이스 HTML
+      let pendingHtml = '';
+      if (pendingTCs.length > 0) {
+        let rows = '';
+        pendingTCs.forEach(tc => {
+          const result = results[tc.tcId];
+          rows += '<tr style="border-bottom: 1px solid #eee;"><td style="padding: 8px; font-weight: bold;">' + escapeHtml(tc.tcId) + '</td><td style="padding: 8px;">' + escapeHtml(tc.name) + '</td><td style="padding: 8px;"><span style="background: #fef3c7; color: #d97706; padding: 2px 8px; border-radius: 10px; font-size: 11px;">보류</span></td><td style="padding: 8px; font-size: 12px;">' + escapeHtml(result?.message || '-') + '</td></tr>';
+        });
+        pendingHtml = '<div style="margin-bottom: 20px;"><h3 style="font-size: 14px; margin-bottom: 10px; color: #f59e0b;">⏸️ 보류 케이스 (' + pendingTCs.length + '건)</h3><table style="width: 100%; border-collapse: collapse; font-size: 11px;"><thead><tr style="background: #f8f9fa;"><th style="padding: 8px; text-align: left; width: 100px;">TC ID</th><th style="padding: 8px; text-align: left;">테스트명</th><th style="padding: 8px; text-align: left; width: 60px;">상태</th><th style="padding: 8px; text-align: left;">사유</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+      }
+
+      // 그룹별 요약 HTML
+      let groupSummaryHtml = '<table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 20px;"><thead><tr style="background: #f8f9fa;"><th style="padding: 8px; text-align: left;">그룹</th><th style="padding: 8px; text-align: center; width: 50px;">전체</th><th style="padding: 8px; text-align: center; width: 50px;">성공</th><th style="padding: 8px; text-align: center; width: 50px;">실패</th><th style="padding: 8px; text-align: center; width: 50px;">보류</th><th style="padding: 8px; text-align: center; width: 60px;">통과율</th></tr></thead><tbody>';
+      Object.values(groups).forEach(g => {
+        const rate = g.stats.total > 0 ? Math.round((g.stats.passed / g.stats.total) * 100) : 0;
+        groupSummaryHtml += '<tr style="border-bottom: 1px solid #eee;"><td style="padding: 8px;">' + escapeHtml(g.name) + '</td><td style="padding: 8px; text-align: center;">' + g.stats.total + '</td><td style="padding: 8px; text-align: center; color: #10b981;">' + g.stats.passed + '</td><td style="padding: 8px; text-align: center; color: #ef4444;">' + g.stats.failed + '</td><td style="padding: 8px; text-align: center; color: #f59e0b;">' + g.stats.pending + '</td><td style="padding: 8px; text-align: center; font-weight: bold;">' + rate + '%</td></tr>';
+      });
+      groupSummaryHtml += '</tbody></table>';
+
+      container.innerHTML =
+        '<div style="text-align: center; border-bottom: 2px solid #667eea; padding-bottom: 15px; margin-bottom: 20px;">' +
+        '  <h1 style="font-size: 22px; color: #667eea; margin-bottom: 5px;">E2E 테스트 리포트</h1>' +
+        '  <div style="color: #666; font-size: 12px;">생성일시: ' + reportDate + '</div>' +
+        '</div>' +
+        '<div style="display: flex; gap: 10px; margin-bottom: 20px; justify-content: center;">' +
+        '  <div style="background: #f0f0ff; padding: 15px 25px; border-radius: 8px; text-align: center;">' +
+        '    <div style="font-size: 28px; font-weight: bold; color: #667eea;">' + total + '</div>' +
+        '    <div style="font-size: 11px; color: #666;">전체</div>' +
+        '  </div>' +
+        '  <div style="background: #d1fae5; padding: 15px 25px; border-radius: 8px; text-align: center;">' +
+        '    <div style="font-size: 28px; font-weight: bold; color: #10b981;">' + passed + '</div>' +
+        '    <div style="font-size: 11px; color: #666;">성공</div>' +
+        '  </div>' +
+        '  <div style="background: #fee2e2; padding: 15px 25px; border-radius: 8px; text-align: center;">' +
+        '    <div style="font-size: 28px; font-weight: bold; color: #ef4444;">' + failed + '</div>' +
+        '    <div style="font-size: 11px; color: #666;">실패</div>' +
+        '  </div>' +
+        '  <div style="background: #fef3c7; padding: 15px 25px; border-radius: 8px; text-align: center;">' +
+        '    <div style="font-size: 28px; font-weight: bold; color: #f59e0b;">' + (pending + waiting) + '</div>' +
+        '    <div style="font-size: 11px; color: #666;">보류/대기</div>' +
+        '  </div>' +
+        '  <div style="background: #ede9fe; padding: 15px 25px; border-radius: 8px; text-align: center;">' +
+        '    <div style="font-size: 28px; font-weight: bold; color: #8b5cf6;">' + passRate + '%</div>' +
+        '    <div style="font-size: 11px; color: #666;">통과율</div>' +
+        '  </div>' +
+        '</div>' +
+        '<div style="display: flex; gap: 20px; margin-bottom: 20px;">' +
+        '  <div style="flex: 1;"><canvas id="pdfPieChart" width="200" height="200"></canvas></div>' +
+        '  <div style="flex: 2;"><canvas id="pdfBarChart" width="400" height="200"></canvas></div>' +
+        '</div>' +
+        '<h3 style="font-size: 14px; margin-bottom: 10px; color: #333;">📊 그룹별 요약</h3>' +
+        groupSummaryHtml +
+        failedHtml +
+        pendingHtml;
+
+      document.body.appendChild(container);
+
+      // 차트 렌더링
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      new Chart(document.getElementById('pdfPieChart'), {
+        type: 'doughnut',
+        data: {
+          labels: ['성공', '실패', '보류', '대기'],
+          datasets: [{
+            data: [passed, failed, pending, waiting],
+            backgroundColor: ['#10b981', '#ef4444', '#f59e0b', '#9ca3af'],
+            borderWidth: 0
+          }]
+        },
+        options: {
+          responsive: false,
+          plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } } },
+          cutout: '50%',
+          animation: false
+        }
+      });
+
+      new Chart(document.getElementById('pdfBarChart'), {
+        type: 'bar',
+        data: {
+          labels: groupLabels,
+          datasets: [
+            { label: '성공', data: groupPassed, backgroundColor: '#10b981' },
+            { label: '실패', data: groupFailed, backgroundColor: '#ef4444' },
+            { label: '보류', data: groupPending, backgroundColor: '#f59e0b' },
+            { label: '대기', data: groupWaiting, backgroundColor: '#9ca3af' }
+          ]
+        },
+        options: {
+          responsive: false,
+          plugins: { legend: { position: 'bottom', labels: { font: { size: 9 } } } },
+          scales: {
+            x: { stacked: true, ticks: { font: { size: 8 }, maxRotation: 45 } },
+            y: { stacked: true, beginAtZero: true }
+          },
+          animation: false
+        }
+      });
+
+      // 차트 렌더링 대기
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // PDF 생성
+      const opt = {
+        margin: 10,
+        filename: 'e2e-test-report-' + dateStr + '.pdf',
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      try {
+        await html2pdf().set(opt).from(container).save();
+        console.log('PDF downloaded: e2e-test-report-' + dateStr + '.pdf');
+      } catch (e) {
+        console.error('PDF generation failed:', e);
+        alert('PDF 생성에 실패했습니다: ' + e.message);
+      } finally {
+        document.body.removeChild(container);
+      }
+    }
+
+    function downloadExcel() {
+      const wb = XLSX.utils.book_new();
+
+      // 요약 통계 계산
+      const total = scenarios.length;
+      let passed = 0, failed = 0, pending = 0;
+      Object.values(results).forEach(r => {
+        if (r.status === 'passed') passed++;
+        else if (r.status === 'failed') failed++;
+        else if (r.status === 'pending') pending++;
+      });
+      const waiting = total - passed - failed - pending;
+      const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
+
+      // 1. 요약 시트
+      const summaryData = [
+        ['E2E 테스트 리포트'],
+        ['생성일시', new Date().toLocaleString('ko-KR')],
+        [],
+        ['전체 테스트', total],
+        ['성공', passed],
+        ['실패', failed],
+        ['보류', pending],
+        ['대기', waiting],
+        ['통과율', `${passRate}%`]
+      ];
+      const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+      summarySheet['!cols'] = [{ wch: 15 }, { wch: 25 }];
+      XLSX.utils.book_append_sheet(wb, summarySheet, '요약');
+
+      // 2. 그룹별 요약 시트
+      const groups = getGroupedScenarios();
+      const groupSummaryData = [
+        ['그룹명', '전체', '성공', '실패', '보류', '통과율']
+      ];
+      Object.entries(groups).forEach(([key, group]) => {
+        const rate = group.stats.total > 0
+          ? Math.round((group.stats.passed / group.stats.total) * 100)
+          : 0;
+        groupSummaryData.push([
+          group.name,
+          group.stats.total,
+          group.stats.passed,
+          group.stats.failed,
+          group.stats.pending,
+          `${rate}%`
+        ]);
+      });
+      const groupSheet = XLSX.utils.aoa_to_sheet(groupSummaryData);
+      groupSheet['!cols'] = [{ wch: 25 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 }];
+      XLSX.utils.book_append_sheet(wb, groupSheet, '그룹별 요약');
+
+      // 3. 전체 테스트 케이스 시트
+      const allTCData = [
+        ['TC ID', '그룹', '테스트명', '상태', '에러 메시지']
+      ];
+      scenarios.forEach(tc => {
+        const result = results[tc.tcId];
+        const status = result?.status || 'waiting';
+        const statusText = status === 'passed' ? '성공' :
+                          status === 'failed' ? '실패' :
+                          status === 'pending' ? '보류' : '대기';
+        const errorMsg = status === 'failed' ? (result?.message || '') : '';
+        allTCData.push([
+          tc.tcId,
+          tc.group || '',
+          tc.name,
+          statusText,
+          errorMsg
+        ]);
+      });
+      const allTCSheet = XLSX.utils.aoa_to_sheet(allTCData);
+      allTCSheet['!cols'] = [{ wch: 20 }, { wch: 20 }, { wch: 40 }, { wch: 8 }, { wch: 50 }];
+      XLSX.utils.book_append_sheet(wb, allTCSheet, '전체 테스트');
+
+      // 4. 실패 케이스 시트
+      const failedTCs = scenarios.filter(tc => results[tc.tcId]?.status === 'failed');
+      if (failedTCs.length > 0) {
+        const failedData = [
+          ['TC ID', '테스트명', '에러 메시지', '실행 시간']
+        ];
+        failedTCs.forEach(tc => {
+          const result = results[tc.tcId];
+          failedData.push([
+            tc.tcId,
+            tc.name,
+            result?.message || 'Unknown error',
+            result?.duration ? `${result.duration}ms` : ''
+          ]);
+        });
+        const failedSheet = XLSX.utils.aoa_to_sheet(failedData);
+        failedSheet['!cols'] = [{ wch: 20 }, { wch: 40 }, { wch: 60 }, { wch: 12 }];
+        XLSX.utils.book_append_sheet(wb, failedSheet, '실패 케이스');
+      }
+
+      // 5. 보류 케이스 시트
+      const pendingTCs = scenarios.filter(tc => results[tc.tcId]?.status === 'pending');
+      if (pendingTCs.length > 0) {
+        const pendingData = [
+          ['TC ID', '테스트명', '사유']
+        ];
+        pendingTCs.forEach(tc => {
+          const result = results[tc.tcId];
+          pendingData.push([
+            tc.tcId,
+            tc.name,
+            result?.message || ''
+          ]);
+        });
+        const pendingSheet = XLSX.utils.aoa_to_sheet(pendingData);
+        pendingSheet['!cols'] = [{ wch: 20 }, { wch: 40 }, { wch: 60 }];
+        XLSX.utils.book_append_sheet(wb, pendingSheet, '보류 케이스');
+      }
+
+      // 파일 저장
+      const filename = `e2e-test-report-${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(wb, filename);
+      console.log('Excel saved:', filename);
+    }
+
+    // Initialize
+    connect();
+  </script>
+</body>
+</html>

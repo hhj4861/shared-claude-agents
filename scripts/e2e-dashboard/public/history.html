@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>E2E 테스트 이력 관리</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      color: #e0e0e0;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 32px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .header h1 {
+      font-size: 24px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header h1 span {
+      font-size: 28px;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 12px;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: #3498db;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #2980b9;
+    }
+
+    .btn-danger {
+      background: #e74c3c;
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #c0392b;
+    }
+
+    .btn-secondary {
+      background: rgba(255,255,255,0.1);
+      color: #e0e0e0;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255,255,255,0.2);
+    }
+
+    /* Stats Bar */
+    .stats-bar {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+
+    .stat-card {
+      background: rgba(255,255,255,0.05);
+      border-radius: 12px;
+      padding: 16px 24px;
+      min-width: 150px;
+    }
+
+    .stat-card .label {
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 4px;
+    }
+
+    .stat-card .value {
+      font-size: 24px;
+      font-weight: 600;
+    }
+
+    /* Filter Bar */
+    .filter-bar {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 24px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .filter-bar input {
+      padding: 10px 16px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.05);
+      color: #e0e0e0;
+      font-size: 14px;
+      width: 250px;
+    }
+
+    .filter-bar input::placeholder {
+      color: #666;
+    }
+
+    .filter-bar select {
+      padding: 10px 16px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.05);
+      color: #e0e0e0;
+      font-size: 14px;
+    }
+
+    /* Project Groups */
+    .project-group {
+      margin-bottom: 32px;
+    }
+
+    .project-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding: 12px 16px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .project-header:hover {
+      background: rgba(255,255,255,0.06);
+    }
+
+    .project-header h2 {
+      font-size: 18px;
+      font-weight: 600;
+      flex: 1;
+    }
+
+    .project-header .count {
+      background: rgba(255,255,255,0.1);
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+    }
+
+    .project-header .toggle-icon {
+      font-size: 12px;
+      color: #888;
+      transition: transform 0.2s;
+    }
+
+    .project-header.collapsed .toggle-icon {
+      transform: rotate(-90deg);
+    }
+
+    /* History Cards */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 16px;
+    }
+
+    .history-card {
+      background: rgba(255,255,255,0.05);
+      border-radius: 12px;
+      padding: 20px;
+      transition: all 0.2s;
+      border: 1px solid transparent;
+      position: relative;
+    }
+
+    .history-card:hover {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.1);
+      transform: translateY(-2px);
+    }
+
+    .history-card.current {
+      border-color: #3498db;
+      background: rgba(52, 152, 219, 0.1);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 16px;
+    }
+
+    .card-date {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .card-time {
+      font-size: 12px;
+      color: #888;
+      margin-top: 2px;
+    }
+
+    .card-badge {
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .badge-complete {
+      background: rgba(39, 174, 96, 0.2);
+      color: #27ae60;
+    }
+
+    .badge-partial {
+      background: rgba(243, 156, 18, 0.2);
+      color: #f39c12;
+    }
+
+    .badge-started {
+      background: rgba(231, 76, 60, 0.2);
+      color: #e74c3c;
+    }
+
+    .badge-current {
+      background: rgba(52, 152, 219, 0.2);
+      color: #3498db;
+    }
+
+    /* Progress Bar */
+    .progress-container {
+      margin-bottom: 16px;
+    }
+
+    .progress-bar {
+      height: 8px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 4px;
+      overflow: hidden;
+      display: flex;
+    }
+
+    .progress-passed {
+      background: #27ae60;
+      height: 100%;
+    }
+
+    .progress-failed {
+      background: #e74c3c;
+      height: 100%;
+    }
+
+    .progress-stats {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 8px;
+      font-size: 12px;
+      color: #888;
+    }
+
+    .progress-stats .passed { color: #27ae60; }
+    .progress-stats .failed { color: #e74c3c; }
+
+    /* Card Details */
+    .card-details {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 16px;
+      font-size: 13px;
+      color: #888;
+    }
+
+    .card-details span {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Card Actions */
+    .card-actions {
+      display: flex;
+      gap: 8px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .card-actions .btn {
+      flex: 1;
+      justify-content: center;
+      padding: 8px 12px;
+      font-size: 13px;
+    }
+
+    .btn-resume {
+      background: #27ae60;
+      color: white;
+    }
+
+    .btn-resume:hover {
+      background: #219a52;
+    }
+
+    .btn-view {
+      background: rgba(255,255,255,0.1);
+      color: #e0e0e0;
+    }
+
+    .btn-view:hover {
+      background: rgba(255,255,255,0.15);
+    }
+
+    .btn-delete {
+      background: transparent;
+      color: #e74c3c;
+      padding: 8px;
+      flex: 0;
+    }
+
+    .btn-delete:hover {
+      background: rgba(231, 76, 60, 0.1);
+    }
+
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #666;
+    }
+
+    .empty-state .icon {
+      font-size: 64px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    .empty-state h3 {
+      font-size: 18px;
+      margin-bottom: 8px;
+      color: #888;
+    }
+
+    .empty-state p {
+      font-size: 14px;
+    }
+
+    /* Delete Confirmation */
+    .delete-confirm {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.9);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 16px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+
+    .delete-confirm.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .delete-confirm p {
+      font-size: 14px;
+      color: #e0e0e0;
+    }
+
+    .delete-confirm .btns {
+      display: flex;
+      gap: 8px;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #27ae60;
+      color: white;
+      padding: 16px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s;
+      z-index: 1000;
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    .toast.error {
+      background: #e74c3c;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .container { padding: 16px; }
+      .header { flex-direction: column; gap: 16px; align-items: flex-start; }
+      .stats-bar { flex-direction: column; }
+      .stat-card { min-width: 100%; }
+      .filter-bar { flex-direction: column; align-items: stretch; }
+      .filter-bar input, .filter-bar select { width: 100%; }
+      .cards-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1>
+        <span>📋</span>
+        E2E 테스트 이력 관리
+      </h1>
+      <div class="header-actions">
+        <button class="btn btn-secondary" onclick="location.href='/'">
+          ← 대시보드로 돌아가기
+        </button>
+        <button class="btn btn-danger" onclick="clearAllHistory()">
+          🗑️ 전체 삭제
+        </button>
+      </div>
+    </div>
+
+    <!-- Stats Bar -->
+    <div class="stats-bar">
+      <div class="stat-card">
+        <div class="label">전체 이력</div>
+        <div class="value" id="totalCount">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">프로젝트</div>
+        <div class="value" id="projectCount">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">완료된 테스트</div>
+        <div class="value" id="completedCount">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">저장 용량</div>
+        <div class="value" id="storageSize">0 KB</div>
+      </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar">
+      <input type="text" id="searchInput" placeholder="프로젝트명 또는 날짜로 검색..." oninput="filterHistory()">
+      <select id="statusFilter" onchange="filterHistory()">
+        <option value="all">모든 상태</option>
+        <option value="complete">완료 (100%)</option>
+        <option value="partial">진행 중 (50%+)</option>
+        <option value="started">시작됨 (<50%)</option>
+      </select>
+      <select id="sortOrder" onchange="filterHistory()">
+        <option value="newest">최신순</option>
+        <option value="oldest">오래된순</option>
+        <option value="progress">진행률순</option>
+      </select>
+    </div>
+
+    <!-- History Content -->
+    <div id="historyContent">
+      <!-- Dynamic content will be rendered here -->
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script>
+    let cachedHistory = [];
+
+    // Get history from server API
+    async function getHistory() {
+      try {
+        const response = await fetch('/api/history');
+        const data = await response.json();
+        cachedHistory = data.histories || [];
+        return cachedHistory;
+      } catch (e) {
+        console.error('Failed to fetch history:', e);
+        return [];
+      }
+    }
+
+    // Get cached history (for sync operations)
+    function getHistorySync() {
+      return cachedHistory;
+    }
+
+    // Format date
+    function formatDate(timestamp) {
+      const date = new Date(timestamp);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    // Format time
+    function formatTime(timestamp) {
+      const date = new Date(timestamp);
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${hours}:${minutes}`;
+    }
+
+    // Calculate storage size from cached history
+    function getStorageSize() {
+      const data = JSON.stringify(cachedHistory);
+      const bytes = new Blob([data]).size;
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+    }
+
+    // Get badge info based on completion rate
+    function getBadgeInfo(rate) {
+      if (rate >= 100) return { class: 'badge-complete', text: '완료' };
+      if (rate >= 50) return { class: 'badge-partial', text: '진행중' };
+      return { class: 'badge-started', text: '시작됨' };
+    }
+
+    // Show toast message
+    function showToast(message, isError = false) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = 'toast show' + (isError ? ' error' : '');
+      setTimeout(() => toast.className = 'toast', 3000);
+    }
+
+    // Update stats
+    function updateStats(history) {
+      const projects = new Set(history.map(h => h.projectName || 'Unknown'));
+      const completed = history.filter(h => h.completionRate >= 100).length;
+
+      document.getElementById('totalCount').textContent = history.length;
+      document.getElementById('projectCount').textContent = projects.size;
+      document.getElementById('completedCount').textContent = completed;
+      document.getElementById('storageSize').textContent = getStorageSize();
+    }
+
+    // Render history
+    async function renderHistory() {
+      const history = await getHistory();
+      const content = document.getElementById('historyContent');
+
+      if (history.length === 0) {
+        content.innerHTML = `
+          <div class="empty-state">
+            <div class="icon">📭</div>
+            <h3>저장된 테스트 이력이 없습니다</h3>
+            <p>E2E 테스트를 실행하면 자동으로 이력이 저장됩니다.</p>
+          </div>
+        `;
+        updateStats(history);
+        return;
+      }
+
+      // Group by project
+      const grouped = {};
+      history.forEach(session => {
+        const project = session.projectName || 'Unknown';
+        if (!grouped[project]) grouped[project] = [];
+        grouped[project].push(session);
+      });
+
+      // Sort each group by timestamp (newest first by default)
+      Object.values(grouped).forEach(sessions => {
+        sessions.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      });
+
+      // Render groups
+      let html = '';
+      Object.entries(grouped).forEach(([project, sessions]) => {
+        html += `
+          <div class="project-group" data-project="${project}">
+            <div class="project-header" onclick="toggleProjectGroup(this)">
+              <h2>📁 ${project}</h2>
+              <span class="count">${sessions.length}개 이력</span>
+              <span class="toggle-icon">▼</span>
+            </div>
+            <div class="cards-grid">
+              ${sessions.map(session => renderCard(session)).join('')}
+            </div>
+          </div>
+        `;
+      });
+
+      content.innerHTML = html;
+      updateStats(history);
+    }
+
+    // Render single card
+    function renderCard(session) {
+      const badge = getBadgeInfo(session.completionRate || 0);
+      const total = session.scenarios?.length || 0;
+      const results = session.results || {};
+
+      let passed = 0, failed = 0;
+      Object.values(results).forEach(r => {
+        if (r.status === 'passed') passed++;
+        else if (r.status === 'failed') failed++;
+      });
+
+      const passedPercent = total > 0 ? (passed / total) * 100 : 0;
+      const failedPercent = total > 0 ? (failed / total) * 100 : 0;
+
+      return `
+        <div class="history-card" data-id="${session.id}">
+          <div class="card-header">
+            <div>
+              <div class="card-date">${formatDate(session.timestamp)}</div>
+              <div class="card-time">${formatTime(session.timestamp)}</div>
+            </div>
+            <span class="card-badge ${badge.class}">${badge.text}</span>
+          </div>
+
+          <div class="progress-container">
+            <div class="progress-bar">
+              <div class="progress-passed" style="width: ${passedPercent}%"></div>
+              <div class="progress-failed" style="width: ${failedPercent}%"></div>
+            </div>
+            <div class="progress-stats">
+              <span><span class="passed">${passed} passed</span> / <span class="failed">${failed} failed</span></span>
+              <span>${session.completionRate || 0}%</span>
+            </div>
+          </div>
+
+          <div class="card-details">
+            <span>📊 ${total} TCs</span>
+            <span>⏱️ ${formatTime(session.timestamp)}</span>
+          </div>
+
+          <div class="card-actions">
+            ${session.completionRate < 100 ? `
+              <button class="btn btn-resume" onclick="resumeTest('${session.id}')">
+                ▶️ 이어서 테스트
+              </button>
+            ` : `
+              <button class="btn btn-view" onclick="viewDetails('${session.id}')">
+                👁️ 상세보기
+              </button>
+            `}
+            <button class="btn btn-delete" onclick="showDeleteConfirm('${session.id}')">
+              🗑️
+            </button>
+          </div>
+
+          <div class="delete-confirm" id="delete-${session.id}">
+            <p>이 이력을 삭제하시겠습니까?</p>
+            <div class="btns">
+              <button class="btn btn-danger" onclick="deleteHistory('${session.id}')">삭제</button>
+              <button class="btn btn-secondary" onclick="hideDeleteConfirm('${session.id}')">취소</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Toggle project group
+    function toggleProjectGroup(header) {
+      header.classList.toggle('collapsed');
+      const grid = header.nextElementSibling;
+      grid.style.display = header.classList.contains('collapsed') ? 'none' : 'grid';
+    }
+
+    // Filter history
+    function filterHistory() {
+      const search = document.getElementById('searchInput').value.toLowerCase();
+      const status = document.getElementById('statusFilter').value;
+      const sort = document.getElementById('sortOrder').value;
+
+      let history = getHistorySync();
+
+      // Filter by search
+      if (search) {
+        history = history.filter(h =>
+          (h.projectName || '').toLowerCase().includes(search) ||
+          formatDate(h.timestamp).includes(search)
+        );
+      }
+
+      // Filter by status
+      if (status !== 'all') {
+        history = history.filter(h => {
+          const rate = h.completionRate || 0;
+          if (status === 'complete') return rate >= 100;
+          if (status === 'partial') return rate >= 50 && rate < 100;
+          if (status === 'started') return rate < 50;
+          return true;
+        });
+      }
+
+      // Sort
+      if (sort === 'oldest') {
+        history.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      } else if (sort === 'progress') {
+        history.sort((a, b) => (b.completionRate || 0) - (a.completionRate || 0));
+      } else {
+        history.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      }
+
+      // Re-render with filtered data
+      renderFilteredHistory(history);
+    }
+
+    // Render filtered history (flat, no grouping)
+    function renderFilteredHistory(history) {
+      const content = document.getElementById('historyContent');
+
+      if (history.length === 0) {
+        content.innerHTML = `
+          <div class="empty-state">
+            <div class="icon">🔍</div>
+            <h3>검색 결과가 없습니다</h3>
+            <p>다른 검색어나 필터를 시도해보세요.</p>
+          </div>
+        `;
+        return;
+      }
+
+      content.innerHTML = `
+        <div class="cards-grid">
+          ${history.map(session => renderCard(session)).join('')}
+        </div>
+      `;
+    }
+
+    // Resume test
+    async function resumeTest(sessionId) {
+      const history = getHistorySync();
+      const session = history.find(h => h.id === sessionId);
+
+      if (!session) {
+        showToast('이력을 찾을 수 없습니다.', true);
+        return;
+      }
+
+      try {
+        // Send restore request to server using filename
+        const response = await fetch('/api/history/restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            filename: session.filename
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          showToast(`복원 완료! 미완료 TC: ${data.restored.pendingTCs}개`);
+
+          // Redirect to dashboard after short delay
+          setTimeout(() => {
+            location.href = '/?restored=' + sessionId;
+          }, 1500);
+        } else {
+          showToast('복원 실패: ' + data.error, true);
+        }
+      } catch (err) {
+        showToast('서버 연결 오류: ' + err.message, true);
+      }
+    }
+
+    // View details (redirect to dashboard with session)
+    function viewDetails(sessionId) {
+      // For now, just resume - can be enhanced later
+      resumeTest(sessionId);
+    }
+
+    // Show delete confirmation
+    function showDeleteConfirm(sessionId) {
+      document.getElementById('delete-' + sessionId).classList.add('show');
+    }
+
+    // Hide delete confirmation
+    function hideDeleteConfirm(sessionId) {
+      document.getElementById('delete-' + sessionId).classList.remove('show');
+    }
+
+    // Delete single history
+    async function deleteHistory(sessionId) {
+      const history = getHistorySync();
+      const session = history.find(h => h.id === sessionId);
+      if (!session) {
+        showToast('이력을 찾을 수 없습니다.', true);
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/history/${session.filename}`, {
+          method: 'DELETE'
+        });
+        const data = await response.json();
+
+        if (data.success) {
+          showToast('이력이 삭제되었습니다.');
+          renderHistory();
+        } else {
+          showToast('삭제 실패: ' + data.error, true);
+        }
+      } catch (err) {
+        showToast('서버 연결 오류', true);
+      }
+    }
+
+    // Clear all history
+    async function clearAllHistory() {
+      if (!confirm('모든 테스트 이력을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) return;
+
+      try {
+        const response = await fetch('/api/history', {
+          method: 'DELETE'
+        });
+        const data = await response.json();
+
+        if (data.success) {
+          showToast(`${data.deletedCount}개 이력이 삭제되었습니다.`);
+          renderHistory();
+        } else {
+          showToast('삭제 실패: ' + data.error, true);
+        }
+      } catch (err) {
+        showToast('서버 연결 오류', true);
+      }
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      renderHistory();
+    });
+  </script>
+</body>
+</html>

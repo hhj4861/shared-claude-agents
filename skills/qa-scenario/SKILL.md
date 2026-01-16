@@ -43,11 +43,13 @@ Task({
 
 ```
 Step 1:   문서 수집 (step1-doc-collector)
-Step 1.5: 프로젝트 구조 분석 (step1.5-project-detector) ⭐
+Step 1.5: 프로젝트 구조 분석 (step1.5-project-detector)
 Step 2:   코드 분석 (step2-code-analyzer)
 Step 3:   시나리오 작성 (step3-scenario-writer)
-Step 3.5: 시나리오 외부 검토 (step3.5-scenario-reviewer) 🆕 선택적
-          → Gemini CLI로 교차 검토, 누락 요구사항/테스트 케이스 발견
+Step 3.5: 시나리오 외부 검토 (step3.5-scenario-reviewer) [선택적]
+          → Gemini CLI로 교차 검토 (없으면 스킵)
+Step 3.6: 시나리오 보완 (step3.6-scenario-refiner) 🆕 [선택적]
+          → 리뷰 피드백 반영, 누락 추가/중복 제거
 ```
 
 ## 다음 단계

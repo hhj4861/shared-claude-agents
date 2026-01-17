@@ -1,0 +1,418 @@
+# Agent-Skill Mapping
+# 에이전트와 연관된 스킬 매핑 정의
+# 에이전트 최적화 시 연관 스킬도 함께 최적화됨
+
+version: "2.1"
+description: "에이전트와 연관된 스킬 매핑 - 프로젝트 최적화 시 참조 (v2.1: 동적 에이전트 탐지 지원)"
+
+# 에이전트 카테고리별 매핑
+mappings:
+  # ============================================
+  # Architecture 에이전트
+  # ============================================
+  architecture/_orchestrator:
+    skills: []
+    category: architecture
+    description: "아키텍처 에이전트 오케스트레이터"
+    project_types: [fullstack, backend, monorepo]
+
+  architecture/data-architect:
+    skills: []
+    category: architecture
+    description: "데이터 아키텍처 설계"
+    project_types: [backend, fullstack, monorepo]
+
+  architecture/feasibility-analyst:
+    skills: []
+    category: architecture
+    description: "기술 타당성 분석"
+    project_types: [all]
+
+  architecture/mcp-strategist:
+    skills: []
+    category: architecture
+    description: "MCP 전략 수립"
+    project_types: [all]
+
+  architecture/system-designer:
+    skills: []
+    category: architecture
+    description: "시스템 설계"
+    project_types: [backend, fullstack, monorepo]
+
+  # ============================================
+  # Development 에이전트
+  # ============================================
+  development/_orchestrator:
+    skills: [commit]
+    category: development
+    description: "개발 에이전트 오케스트레이터"
+    project_types: [all]
+
+  development/backend-dev:
+    skills: [api-test, commit]
+    category: development
+    description: "백엔드 개발"
+    project_types: [backend, fullstack, monorepo]
+
+  development/frontend-dev:
+    skills: [e2e-test, commit]
+    category: development
+    description: "프론트엔드 개발"
+    project_types: [frontend, fullstack, monorepo]
+
+  development/tech-architect:
+    skills: [commit]
+    category: development
+    description: "기술 아키텍트"
+    project_types: [all]
+
+  # ============================================
+  # QA 에이전트
+  # ============================================
+  qa/_orchestrator:
+    skills: [qa-scenario, api-test, e2e-test]
+    category: qa
+    description: "QA 오케스트레이터 (qa-director)"
+    project_types: [all]
+
+  qa/step1-doc-collector:
+    skills: []
+    category: qa
+    description: "문서 수집"
+    project_types: [all]
+
+  qa/step1.5-project-detector:
+    skills: []
+    category: qa
+    description: "프로젝트 감지"
+    project_types: [all]
+
+  qa/step2-code-analyzer:
+    skills: []
+    category: qa
+    description: "코드 분석"
+    project_types: [all]
+
+  qa/step3-scenario-writer:
+    skills: [qa-scenario]
+    category: qa
+    description: "시나리오 작성"
+    project_types: [all]
+
+  qa/step3.5-scenario-reviewer:
+    skills: [qa-scenario]
+    category: qa
+    description: "시나리오 검토"
+    project_types: [all]
+
+  qa/step3.6-scenario-refiner:
+    skills: [qa-scenario]
+    category: qa
+    description: "시나리오 개선"
+    project_types: [all]
+
+  qa/step4-backend-tester:
+    skills: [api-test]
+    category: qa
+    description: "백엔드 테스트"
+    project_types: [backend, fullstack, monorepo]
+
+  qa/demo-recorder:
+    skills: [e2e-test]
+    category: qa
+    description: "데모 녹화"
+    project_types: [frontend, fullstack]
+
+  qa/demo-script-generator:
+    skills: []
+    category: qa
+    description: "데모 스크립트 생성"
+    project_types: [all]
+
+  # ============================================
+  # Maintenance 에이전트 (항상 포함)
+  # ============================================
+  maintenance/implementation-planner:
+    skills: []
+    category: maintenance
+    description: "구현 계획 수립"
+    required: true  # 모든 프로젝트 필수
+    project_types: [all]
+
+  maintenance/project-profiler:
+    skills: []
+    category: maintenance
+    description: "프로젝트 분석"
+    required: true  # 모든 프로젝트 필수
+    project_types: [all]
+
+  maintenance/agent-generator:
+    skills: []
+    category: maintenance
+    description: "에이전트 생성"
+    required: true
+    project_types: [all]
+
+  maintenance/agent-optimizer:
+    skills: []
+    category: maintenance
+    description: "에이전트 최적화"
+    project_types: [all]
+
+  maintenance/config-sync:
+    skills: []
+    category: maintenance
+    description: "설정 동기화"
+    project_types: [all]
+
+  maintenance/project-setup:
+    skills: [init-project]
+    category: maintenance
+    description: "프로젝트 설정"
+    project_types: [all]
+
+  maintenance/task-tracker:
+    skills: []
+    category: maintenance
+    description: "작업 추적"
+    project_types: [all]
+
+  maintenance/todo-summarizer:
+    skills: []
+    category: maintenance
+    description: "TODO 요약"
+    project_types: [all]
+
+  maintenance/workflow-validator:
+    skills: []
+    category: maintenance
+    description: "워크플로우 검증"
+    project_types: [all]
+
+  # ============================================
+  # DevOps 에이전트
+  # ============================================
+  devops/_orchestrator:
+    skills: []
+    category: devops
+    description: "DevOps 오케스트레이터"
+    project_types: [backend, fullstack, monorepo]
+
+# ============================================
+# 공통 스킬 (모든 프로젝트에 포함)
+# ============================================
+common_skills:
+  - commit       # 모든 프로젝트에서 커밋 필요
+  - review-pr    # PR 리뷰
+
+# ============================================
+# 프로젝트 타입별 기본 에이전트 세트
+# ============================================
+project_type_defaults:
+  frontend:
+    agents:
+      - development/frontend-dev
+      - qa/_orchestrator
+    skills:
+      - e2e-test
+      - qa-scenario
+
+  backend:
+    agents:
+      - development/backend-dev
+      - qa/_orchestrator
+      - qa/step4-backend-tester
+    skills:
+      - api-test
+      - qa-scenario
+
+  fullstack:
+    agents:
+      - development/frontend-dev
+      - development/backend-dev
+      - qa/_orchestrator
+      - qa/step4-backend-tester
+    skills:
+      - e2e-test
+      - api-test
+      - qa-scenario
+
+  monorepo:
+    agents:
+      - development/frontend-dev
+      - development/backend-dev
+      - qa/_orchestrator
+      - architecture/system-designer
+    skills:
+      - e2e-test
+      - api-test
+      - qa-scenario
+
+  library:
+    agents:
+      - development/tech-architect
+    skills: []
+
+  cli:
+    agents:
+      - development/backend-dev
+    skills:
+      - api-test
+
+  mobile:
+    agents:
+      - development/frontend-dev
+      - qa/_orchestrator
+    skills:
+      - e2e-test
+      - qa-scenario
+
+# ============================================
+# Tech-Stack 에이전트 [v2.1+]
+# 프로젝트 기술 스택에 따라 동적 생성
+# ============================================
+tech_stack:
+  nextjs-optimizer:
+    skills: []
+    category: tech-stack
+    description: "Next.js 최적화 (SSR/CSR, hydration, 빌드)"
+    detection:
+      files: ["package.json"]
+      keywords: ["next", "next.js"]
+      content_match: '"next":'
+    triggers: ["SSR 최적화", "하이드레이션 에러", "Next.js", "빌드 최적화"]
+
+  fastapi-optimizer:
+    skills: []
+    category: tech-stack
+    description: "FastAPI 백엔드 최적화 (헥사고날, API 패턴)"
+    detection:
+      files: ["requirements.txt", "pyproject.toml", "main.py"]
+      keywords: ["fastapi", "uvicorn"]
+      content_match: "fastapi"
+    triggers: ["API 추가", "백엔드 최적화", "FastAPI", "데이터 소스 연동"]
+
+  redis-optimizer:
+    skills: []
+    category: tech-stack
+    description: "Redis/Upstash 캐시 최적화"
+    detection:
+      files: [".env", ".env.local", "*.py", "*.ts"]
+      keywords: ["upstash", "redis", "cache"]
+      env_vars: ["UPSTASH_REDIS_REST_URL", "REDIS_URL"]
+    triggers: ["캐시 최적화", "TTL 설정", "캐시 삭제", "Redis"]
+
+  react-query-optimizer:
+    skills: []
+    category: tech-stack
+    description: "React Query/TanStack Query 최적화"
+    detection:
+      files: ["package.json"]
+      keywords: ["@tanstack/react-query", "react-query"]
+    triggers: ["React Query", "쿼리 캐시", "staleTime"]
+
+# ============================================
+# Operations 에이전트 [v2.1+]
+# 개발/배포/운영 환경 최적화
+# ============================================
+operations:
+  dev-environment:
+    skills: []
+    category: operations
+    description: "개발 환경 설정 (서버 기동, 환경변수)"
+    detection:
+      directories: ["backend", "frontend"]
+      files: ["docker-compose.yml", "docker-compose.yaml"]
+      condition: "backend_and_frontend_exist"
+    triggers: ["서버 안 켜져", "환경변수 오류", "Docker 설정", "포트 충돌"]
+
+  deploy-manager:
+    skills: []
+    category: operations
+    description: "배포 관리 (Docker, K8s)"
+    detection:
+      directories: ["deploy", "k8s", "kubernetes"]
+      files: ["Dockerfile", "docker-compose.yml"]
+    triggers: ["배포 설정", "Docker 빌드", "K8s 설정"]
+
+  ci-cd-guide:
+    skills: []
+    category: operations
+    description: "CI/CD 파이프라인 가이드"
+    detection:
+      directories: [".github/workflows", ".gitlab"]
+      files: [".gitlab-ci.yml", "Jenkinsfile"]
+    triggers: ["CI/CD", "GitHub Actions", "파이프라인"]
+
+# ============================================
+# Domain-Expert 에이전트 [v2.1+]
+# 프로젝트 도메인 전문가
+# ============================================
+domain_experts:
+  investment-strategist:
+    skills: []
+    category: domain-experts
+    description: "투자 전략 전문가 (6-Lens, 종목 선별, AI 점수 검증)"
+    detection:
+      keywords: ["stock", "ticker", "investment", "trading", "6-lens", "portfolio"]
+      directories: ["lens", "analysis"]
+      file_patterns: ["*stock*", "*ticker*", "*lens*"]
+    triggers: ["점수 적절해?", "단기 종목 추천", "분석 검증해줘", "투자 전략"]
+
+  content-strategist:
+    skills: []
+    category: domain-experts
+    description: "콘텐츠 전략가 (SEO, 블로그, 마케팅)"
+    detection:
+      keywords: ["blog", "post", "content", "wordpress", "seo", "article"]
+      directories: ["content", "posts", "articles"]
+    triggers: ["SEO 최적화", "콘텐츠 전략", "블로그 품질"]
+
+  ecommerce-analyst:
+    skills: []
+    category: domain-experts
+    description: "이커머스 분석가 (결제, 주문, 장바구니)"
+    detection:
+      keywords: ["order", "payment", "cart", "checkout", "product", "shop"]
+      directories: ["orders", "payments", "cart"]
+    triggers: ["결제 흐름", "주문 상태", "장바구니 로직"]
+
+# ============================================
+# 동적 에이전트 탐지 규칙 [v2.1+]
+# ============================================
+dynamic_detection:
+  # 기술 스택 탐지 우선순위
+  tech_stack_priority:
+    - nextjs-optimizer      # Next.js 프로젝트
+    - fastapi-optimizer     # FastAPI 백엔드
+    - redis-optimizer       # Redis 캐시 사용
+    - react-query-optimizer # React Query 사용
+
+  # 운영 환경 탐지 우선순위
+  operations_priority:
+    - dev-environment  # 백엔드+프론트 모노레포
+    - deploy-manager   # Docker/K8s 배포
+    - ci-cd-guide      # CI/CD 파이프라인
+
+  # 도메인 탐지 우선순위 (코드 키워드 기반)
+  domain_priority:
+    - investment-strategist  # 주식/투자 관련
+    - content-strategist     # 콘텐츠/블로그 관련
+    - ecommerce-analyst      # 이커머스 관련
+
+  # 탐지 방법
+  detection_methods:
+    file_exists: "해당 파일이 존재하는지 확인"
+    directory_exists: "해당 디렉토리가 존재하는지 확인"
+    content_match: "파일 내용에 키워드가 포함되는지 확인"
+    env_var_exists: "환경변수가 설정되어 있는지 확인"
+    combined_condition: "여러 조건의 조합"
+
+# ============================================
+# 필수 에이전트 (모든 프로젝트)
+# ============================================
+required_agents:
+  - maintenance/implementation-planner
+  - maintenance/project-profiler
+  - maintenance/agent-generator

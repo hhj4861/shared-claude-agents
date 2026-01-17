@@ -7,4 +7,24 @@
 # Local overrides
 .local/
 
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Node.js
+node_modules/
+package-lock.json
+dist/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Docs (샘플/스크린샷)
 docs/sample
+docs/qa/screenshots/
+
+# Scripts local
+scripts/.claude/

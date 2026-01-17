@@ -1,0 +1,202 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Agent Registry",
+  "description": "프로젝트별 에이전트 레지스트리 - 공통/동적 에이전트 매핑 및 라우팅 규칙",
+  "type": "object",
+  "required": ["version", "generatedAt", "agents"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "레지스트리 스키마 버전",
+      "default": "1.0"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "레지스트리 생성 시각 (ISO-8601)"
+    },
+    "lastUpdated": {
+      "type": "string",
+      "format": "date-time",
+      "description": "마지막 업데이트 시각"
+    },
+    "projectInfo": {
+      "type": "object",
+      "description": "프로젝트 기본 정보",
+      "properties": {
+        "name": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["frontend", "backend", "fullstack", "monorepo", "library", "cli", "mobile", "unknown"]
+        },
+        "primaryLanguage": { "type": "string" },
+        "frameworks": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "agents": {
+      "type": "object",
+      "description": "에이전트 분류",
+      "properties": {
+        "required": {
+          "type": "array",
+          "description": "모든 프로젝트에 필수인 에이전트",
+          "items": { "type": "string" },
+          "default": ["implementation-planner", "project-profiler"]
+        },
+        "shared": {
+          "type": "array",
+          "description": "공통 에이전트 중 이 프로젝트에 적합한 것들",
+          "items": { "type": "string" }
+        },
+        "generated": {
+          "type": "array",
+          "description": "이 프로젝트를 위해 동적 생성된 에이전트",
+          "items": {
+            "type": "object",
+            "required": ["name", "purpose"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "에이전트 이름 (파일명)"
+              },
+              "basedOn": {
+                "type": "string",
+                "description": "기반이 된 공통 에이전트 (있는 경우)"
+              },
+              "purpose": {
+                "type": "string",
+                "description": "이 에이전트가 하는 일"
+              },
+              "triggers": {
+                "type": "array",
+                "description": "이 에이전트를 호출하는 키워드/문구",
+                "items": { "type": "string" }
+              },
+              "domain": {
+                "type": "string",
+                "description": "담당 도메인/영역"
+              },
+              "generatedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "requiredMcp": {
+                "type": "array",
+                "description": "이 에이전트가 필요로 하는 MCP 서버 목록",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": { "type": "string", "description": "MCP 서버 이름" },
+                    "reason": { "type": "string", "description": "필요한 이유" },
+                    "installCommand": { "type": "string", "description": "설치 명령어" },
+                    "required": { "type": "boolean", "description": "필수 여부", "default": false },
+                    "configured": { "type": "boolean", "description": "설정 완료 여부", "default": false }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "mcpRequirements": {
+      "type": "object",
+      "description": "프로젝트 전체에 필요한 MCP 서버 설정",
+      "properties": {
+        "installed": {
+          "type": "array",
+          "description": "이미 설치된 MCP 서버",
+          "items": { "type": "string" }
+        },
+        "required": {
+          "type": "array",
+          "description": "필요하지만 미설치된 MCP 서버",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "reason": { "type": "string" },
+              "installCommand": { "type": "string" },
+              "authRequired": { "type": "boolean", "description": "OAuth 등 추가 인증 필요 여부" }
+            }
+          }
+        }
+      }
+    },
+    "routing": {
+      "type": "object",
+      "description": "키워드 → 에이전트 라우팅 규칙",
+      "additionalProperties": {
+        "type": "string",
+        "description": "키워드에 매핑되는 에이전트 이름"
+      }
+    },
+    "domainMapping": {
+      "type": "object",
+      "description": "도메인 → 에이전트 매핑",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "primaryAgent": { "type": "string" },
+          "supportAgents": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "version": "1.0",
+      "generatedAt": "2025-01-17T10:00:00Z",
+      "projectInfo": {
+        "name": "my-ecommerce",
+        "type": "fullstack",
+        "primaryLanguage": "TypeScript",
+        "frameworks": ["Next.js", "Prisma"]
+      },
+      "agents": {
+        "required": ["implementation-planner", "project-profiler"],
+        "shared": ["frontend-dev", "backend-dev", "qa-director"],
+        "generated": [
+          {
+            "name": "payment-tester",
+            "basedOn": "step4-backend-tester",
+            "purpose": "Toss Payments 결제 플로우 전용 테스트",
+            "triggers": ["결제 테스트", "payment", "Toss"],
+            "domain": "payment",
+            "generatedAt": "2025-01-17T10:00:00Z"
+          },
+          {
+            "name": "order-validator",
+            "purpose": "주문 상태 머신 검증",
+            "triggers": ["주문 상태", "order state"],
+            "domain": "order",
+            "generatedAt": "2025-01-17T10:00:00Z"
+          }
+        ]
+      },
+      "routing": {
+        "결제": "payment-tester",
+        "주문": "order-validator",
+        "상품": "frontend-dev",
+        "API": "backend-dev",
+        "테스트": "qa-director"
+      },
+      "domainMapping": {
+        "payment": {
+          "primaryAgent": "payment-tester",
+          "supportAgents": ["backend-dev"]
+        },
+        "order": {
+          "primaryAgent": "order-validator",
+          "supportAgents": ["backend-dev", "frontend-dev"]
+        }
+      }
+    }
+  ]
+}

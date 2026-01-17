@@ -52,6 +52,9 @@ shared-claude-agents/
 │   ├── e2e-dashboard/         # E2E 테스트 대시보드
 │   └── qa-input-form/         # QA 설정 입력 폼
 │
+├── mcp-servers/               # MCP 서버
+│   └── puppeteer-browser/     # Puppeteer 브라우저 자동화
+│
 ├── RULES.md                   # 팀 공통 규칙
 ├── install.sh                 # 설치 스크립트
 └── README.md                  # 이 문서
@@ -163,6 +166,133 @@ cp ~/.claude/shared-agents/agents/development/frontend-dev.md .claude/agents/dev
 ```
 
 프로젝트 레벨 에이전트가 공유 에이전트보다 우선합니다.
+
+## 자동 프로젝트 프로파일링 (v2.1)
+
+### 개요
+
+새 프로젝트에서 Claude Code를 시작하면 **자동으로** 프로젝트를 분석하고 맞춤형 환경을 구성합니다.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Claude 세션 시작                                           │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  SessionStart Hook → auto-project-setup.sh 실행             │
+│  → .claude/project-context.md 존재 확인                     │
+└─────────────────────────────────────────────────────────────┘
+                              │
+              ┌───────────────┴───────────────┐
+              │                               │
+          [없음]                          [있음]
+              │                               │
+              ▼                               ▼
+┌─────────────────────────┐     ┌─────────────────────────────┐
+│  "프로젝트 분석해줘?"   │     │  컨텍스트 로드하여         │
+│   1) 자동 (권장)        │     │  세션 시작                  │
+│   2) 수동               │     └─────────────────────────────┘
+│   3) 건너뛰기           │
+└─────────────────────────┘
+              │
+              ▼ (자동 선택 시)
+┌─────────────────────────────────────────────────────────────┐
+│  project-profiler → 프로젝트 분석                           │
+│  agent-generator → 맞춤형 에이전트 생성                     │
+└─────────────────────────────────────────────────────────────┘
+              │
+              ▼
+┌─────────────────────────────────────────────────────────────┐
+│  .claude/project-context.md 생성                            │
+│  .claude/project-agents/ 생성                               │
+│  .claude/agent-registry.json 생성                           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Quick Install (권장)
+
+최소한의 설정으로 자동 프로파일링을 활성화합니다.
+
+```bash
+# 1회만 실행하면 모든 프로젝트에서 자동 적용
+~/.claude/shared-agents/scripts/quick-install.sh
+```
+
+이후 **모든 프로젝트**에서 Claude 세션 시작 시:
+- 자동으로 프로젝트 감지
+- 필요한 심볼릭 링크 자동 생성
+- 프로젝트 분석 여부 질문
+
+### 동적 에이전트 생성 (v2.1)
+
+프로젝트 분석 시 기술 스택과 도메인에 맞는 에이전트를 **자동 탐지**하여 생성합니다.
+
+| 유형 | 탐지 조건 | 생성되는 에이전트 |
+|------|----------|------------------|
+| **Tech-Stack** | package.json에 `next` | `nextjs-optimizer` |
+| | requirements.txt에 `fastapi` | `fastapi-optimizer` |
+| | 환경변수에 `UPSTASH_*` | `redis-optimizer` |
+| | package.json에 `@tanstack/react-query` | `react-query-optimizer` |
+| **Operations** | `backend/` + `frontend/` 동시 존재 | `dev-environment` |
+| | `Dockerfile` 존재 | `deploy-manager` |
+| | `.github/workflows/` 존재 | `ci-cd-guide` |
+| **Domain Expert** | 코드에 `stock`, `investment` 키워드 | `investment-strategist` |
+| | 코드에 `blog`, `content`, `wordpress` | `content-strategist` |
+| | 코드에 `order`, `payment`, `cart` | `ecommerce-analyst` |
+
+### 생성되는 파일
+
+| 파일 | 설명 |
+|------|------|
+| `.claude/project-context.md` | 프로젝트 분석 결과 (목적, 기술스택, 도메인, 문제점) |
+| `.claude/project-agents/` | 프로젝트 전용 동적 에이전트 |
+| `.claude/agent-registry.json` | 에이전트 매핑 및 라우팅 규칙 |
+
+### 기존 Claude Code 프로젝트와 병합
+
+이미 Claude Code를 사용 중인 프로젝트에서:
+
+```bash
+# --merge 플래그로 기존 설정과 병합
+~/.claude/shared-agents/scripts/auto-project-setup.sh --merge
+```
+
+병합 후 Claude 세션에서:
+```bash
+> 에이전트 최적화해줘
+```
+
+**최적화 내용:**
+- 기존 에이전트와 공통 에이전트 비교
+- 중복 에이전트 병합
+- 에이전트 그룹핑 (qa/, dev/, maintenance/, domain/)
+- `agent-registry.json` 생성
+
+### 수동 실행
+
+```bash
+# 프로젝트 분석
+> 프로젝트 분석해줘
+> /profile
+
+# 재분석 (기존 컨텍스트 덮어쓰기)
+> 프로젝트 다시 분석해줘
+> /profile --force
+
+# 에이전트 생성
+> 에이전트 생성해줘
+> /generate-agent
+```
+
+### 프로파일링 에이전트
+
+| 에이전트 | 설명 |
+|----------|------|
+| `project-profiler` | 프로젝트 심층 분석 (WHY, WHAT, HOW, DOMAIN, GAPS) |
+| `agent-generator` | 에이전트/스킬 최적화 생성 |
+| `agent-optimizer` | 에이전트 중복 제거, 병합, 그룹핑 |
+| `implementation-planner` | 구현 계획 수립 및 추적 |
 
 ## QA 파이프라인
 
@@ -322,6 +452,10 @@ NO_OPEN=1 SCENARIO_PATH=docs/qa/latest/scenarios node ~/.claude/scripts/e2e-dash
 | step4-backend-tester | API 테스트 | (qa-director가 호출) |
 | step4-e2e-tester | E2E 테스트 | (qa-director가 호출) |
 | config-sync | 설정 파일 동기화 | "설정 동기화해줘" |
+| project-profiler | 프로젝트 심층 분석 | "프로젝트 분석해줘" |
+| agent-generator | 에이전트/스킬 생성 | "에이전트 생성해줘" |
+| agent-optimizer | 에이전트 최적화 | "에이전트 최적화해줘" |
+| implementation-planner | 구현 계획 수립 | (자동 사용) |
 | devops-director | CI/CD 구축 | "배포 파이프라인 구축해줘" |
 
 ## 스킬 사용법
@@ -333,6 +467,45 @@ NO_OPEN=1 SCENARIO_PATH=docs/qa/latest/scenarios node ~/.claude/scripts/e2e-dash
 /commit              # 변경사항 커밋
 /review-pr 123       # PR 리뷰
 ```
+
+## MCP 서버
+
+### Puppeteer Browser
+
+브라우저 테스트 에이전트(`browser-tester`)에서 사용하는 MCP 서버입니다.
+
+#### 설치
+
+```bash
+cd ~/.claude/shared-agents/mcp-servers/puppeteer-browser
+npm install && npm run build
+```
+
+#### Claude Code 설정
+
+`~/.claude/settings.json`에 추가:
+
+```json
+{
+  "mcpServers": {
+    "puppeteer": {
+      "command": "node",
+      "args": ["~/.claude/shared-agents/mcp-servers/puppeteer-browser/dist/index.js"]
+    }
+  }
+}
+```
+
+#### 제공 도구
+
+| 도구 | 설명 |
+|------|------|
+| puppeteer_launch | 브라우저 실행 |
+| puppeteer_navigate | URL 이동 |
+| puppeteer_click | 요소 클릭 |
+| puppeteer_fill | 텍스트 입력 |
+| puppeteer_screenshot | 스크린샷 캡처 |
+| puppeteer_evaluate | JavaScript 실행 |
 
 ## 표준 문서
 

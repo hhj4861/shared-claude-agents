@@ -2,13 +2,15 @@
 #
 # Shared Claude Agents - Install Script
 #
-# 이 스크립트는 공유 에이전트를 설치하고 SessionStart hook을 설정합니다.
-# 또한 MCP 서버를 빌드하고 Claude Code 설정을 자동으로 구성합니다.
-# 기존 에이전트가 있으면 보호하고, 충돌 시 사용자에게 선택권을 제공합니다.
+# 이 스크립트는 글로벌 설치만 하면 됩니다.
+# 설치 후 어떤 프로젝트에서든 Claude를 시작하면 자동으로:
+#   1. 프로젝트 감지 및 설정 (.claude/, 심볼릭 링크 등)
+#   2. 프로젝트 분석 및 컨텍스트 생성
+#   3. 맞춤형 서브에이전트 동적 생성
 #
 # 사용법:
-#   ./install.sh                    # 글로벌 설치만
-#   ./install.sh /path/to/project   # 글로벌 설치 + 프로젝트 설정
+#   ./install.sh                    # 글로벌 설치 (이것만 하면 됨!)
+#   ./install.sh /path/to/project   # (선택) 특정 프로젝트 미리 설정
 #
 
 set -e
@@ -211,7 +213,8 @@ echo -e "       ${GREEN}Done${NC}"
 # 5. SessionStart Hook 및 MCP 권한 설정
 echo -e "${YELLOW}[5/7]${NC} Configuring SessionStart hook and MCP permissions..."
 
-HOOK_COMMAND="cd \"\$HOME/.claude/shared-agents\" && git pull -q 2>/dev/null || true"
+# 글로벌 SessionStart hook - 모든 프로젝트에서 자동 설정
+HOOK_COMMAND="bash \"\$HOME/.claude/shared-agents/scripts/auto-project-setup.sh\" 2>/dev/null || true"
 
 # 자동 승인 도구 목록 (MCP + 기본 도구 + QA 도구)
 MCP_ALLOWED_TOOLS=(
@@ -483,7 +486,7 @@ if [ -n "$PROJECT_PATH" ]; then
     fi
 
     if [ -n "$PROJECT_PATH" ]; then
-        echo -e "${YELLOW}[7/7]${NC} Setting up project: $PROJECT_PATH"
+        echo -e "${YELLOW}[7/7]${NC} (선택) Pre-setting project: $PROJECT_PATH"
         echo ""
 
         # .claude 폴더 생성
@@ -496,13 +499,21 @@ if [ -n "$PROJECT_PATH" ]; then
         [ -d "$SHARED_DIR/standards" ] && setup_project_resource "standards" "$SHARED_DIR/standards" "$PROJECT_PATH/.claude/standards" "dir"
         [ -f "$SHARED_DIR/RULES.md" ] && setup_project_resource "RULES.md" "$SHARED_DIR/RULES.md" "$PROJECT_PATH/.claude/RULES.md" "file"
 
-        # hooks 디렉토리 복사 (task-tracker 자동화)
+        # project-agents 디렉토리 생성 (동적 에이전트용)
+        mkdir -p "$PROJECT_PATH/.claude/project-agents"
+        echo -e "       ${GREEN}✓${NC} project-agents directory created"
+
+        # docs/plans 디렉토리 생성 (구현 계획용)
+        mkdir -p "$PROJECT_PATH/docs/plans"
+        echo -e "       ${GREEN}✓${NC} docs/plans directory created"
+
+        # hooks 디렉토리 복사 (task-tracker + project-context 체크)
         HOOKS_TEMPLATE="$SHARED_DIR/templates/.claude/hooks"
         if [ -d "$HOOKS_TEMPLATE" ]; then
             mkdir -p "$PROJECT_PATH/.claude/hooks"
             cp -r "$HOOKS_TEMPLATE"/* "$PROJECT_PATH/.claude/hooks/"
             chmod +x "$PROJECT_PATH/.claude/hooks"/*.sh 2>/dev/null || true
-            echo -e "       ${GREEN}✓${NC} hooks configured (task-tracker)"
+            echo -e "       ${GREEN}✓${NC} hooks configured (auto-profiling + task-tracker)"
         fi
 
         # settings.json에 hooks 설정 추가
@@ -559,14 +570,28 @@ if [ -n "$PROJECT_PATH" ]; then
         fi
 
         echo ""
-        echo -e "${GREEN}Project setup complete!${NC}"
+        echo -e "${GREEN}Pre-setup complete for: $PROJECT_PATH${NC}"
+        echo -e "  (참고: 이 설정 없이도 자동으로 됩니다)"
+        echo ""
     fi
 else
-    echo -e "${GREEN}[7/7]${NC} Global installation complete!"
-    echo ""
-    echo "To set up a specific project, run:"
-    echo -e "  ${CYAN}./install.sh /path/to/your/project${NC}"
+    echo -e "${GREEN}[7/7]${NC} Skipped (no project path provided)"
 fi
+
+echo ""
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${CYAN}  자동 프로젝트 설정 활성화됨${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+echo -e "  이제 ${GREEN}어떤 프로젝트에서든${NC} Claude를 시작하면:"
+echo ""
+echo -e "    ${GREEN}1.${NC} 자동으로 프로젝트 감지"
+echo -e "    ${GREEN}2.${NC} 필요한 설정 자동 생성 (.claude/, 심볼릭 링크 등)"
+echo -e "    ${GREEN}3.${NC} 프로젝트 컨텍스트 없으면 자동 분석 시작"
+echo -e "    ${GREEN}4.${NC} 맞춤형 서브에이전트 자동 생성"
+echo ""
+echo -e "  ${YELLOW}프로젝트별 install.sh 실행이 필요 없습니다!${NC}"
+echo ""
 
 echo ""
 echo -e "${GREEN}================================================${NC}"

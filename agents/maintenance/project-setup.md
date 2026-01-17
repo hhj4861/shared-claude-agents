@@ -488,7 +488,7 @@ Write(".claude/agents/frontend-dev.md", customizedContent)
 에이전트/스킬 템플릿 위치:
 
 ```
-/Users/admin/Desktop/workSpace/shared-claude-agents/
+$HOME/.claude/shared-agents/
 ├── agents/
 │   ├── development/
 │   │   ├── frontend-dev.md

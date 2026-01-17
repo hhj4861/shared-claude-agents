@@ -16,11 +16,11 @@ TC 완료 시 **대시보드 sync.sh**와 **MCP 도구**를 모두 호출해야 
 
 ```bash
 # 1️⃣ 대시보드 동기화 (sync.sh)
-/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh complete "TC-ID" pass "메시지"
+$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh complete "TC-ID" pass "메시지"
 
 # 2️⃣ MCP 상태 파일 동기화 (병렬 호출!)
 mcp__qa-pipeline__e2e_update_result(
-  project_path: "/Users/admin/Desktop/workSpace/socar-backoffice-portal-frontend",
+  project_path: "$PROJECT_PATH",
   tc_id: "TC-ID",
   status: "pass"  # pass | fail | skip
 )
@@ -39,9 +39,9 @@ SYNC="..."
 $SYNC step ...
 
 # ✅ 필수: 직접 경로 사용 (권한 프롬프트 없음)
-/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh start "TC-ID" "테스트명"
-/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh step "TC-ID" 0 pass "메시지"
-/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh complete "TC-ID" pass "메시지"
+$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh start "TC-ID" "테스트명"
+$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh step "TC-ID" 0 pass "메시지"
+$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh complete "TC-ID" pass "메시지"
 ```
 
 **❌ 금지:**
@@ -87,25 +87,25 @@ $SYNC step ...
 
 ```bash
 # TC 시작
-/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh start "TC-MENU-E2E-003" "아이템 메뉴 생성"
+$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh start "TC-MENU-E2E-003" "아이템 메뉴 생성"
 
 # 스텝 0: /adminMenu
 mcp__playwright__browser_navigate("/adminMenu")
-/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh step "TC-MENU-E2E-003" 0 pass "/adminMenu 페이지 이동"
+$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh step "TC-MENU-E2E-003" 0 pass "/adminMenu 페이지 이동"
 
 # 스텝 1: 클라이언트 드롭다운
 mcp__playwright__browser_click(...)
-/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh step "TC-MENU-E2E-003" 1 pass "클라이언트 선택"
+$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh step "TC-MENU-E2E-003" 1 pass "클라이언트 선택"
 
 # ... 스텝 2, 3, 4, 5, 6, 7, 8 모두 순차 호출 ...
 
 # TC 완료 (모든 스텝 sync 후!) - 이중 동기화 필수!
 # 1️⃣ 대시보드
-/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh complete "TC-MENU-E2E-003" pass "아이템 메뉴 생성 완료"
+$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh complete "TC-MENU-E2E-003" pass "아이템 메뉴 생성 완료"
 
 # 2️⃣ MCP (병렬 호출!)
 mcp__qa-pipeline__e2e_update_result(
-  project_path: "/Users/admin/Desktop/workSpace/socar-backoffice-portal-frontend",
+  project_path: "$PROJECT_PATH",
   tc_id: "TC-MENU-E2E-003",
   status: "pass"
 )
@@ -253,10 +253,10 @@ print(f'  - 건너뜀 (skip):     {len(d.get(\"skipTCs\", []))}개')
 **보류 사유 확인:**
 ```bash
 # 보류 TC 목록 및 사유 조회
-/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh pending
+$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh pending
 
 # 전체 미완료 TC 조회 (pending + skip + waiting)
-/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh incomplete
+$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh incomplete
 ```
 
 **사유별 처리 방법:**
@@ -361,7 +361,7 @@ def get_retry_candidates(summary, mode, groups=None):
 **이력 파일명 확인:**
 ```bash
 # history/ 폴더에서 이력 파일 목록 확인
-ls -la /Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/history/
+ls -la $HOME/.claude/shared-agents/scripts/e2e-dashboard/history/
 
 # 또는 대시보드 API로 확인
 curl -s http://localhost:3847/api/history | python3 -c "
@@ -694,8 +694,8 @@ pkill -9 -f "ms-playwright" 2>/dev/null || true
 pkill -9 -f "mcp-chrome" 2>/dev/null || true
 
 # Playwright lock 파일 제거
-rm -rf /Users/admin/Library/Caches/ms-playwright/mcp-chrome-*/SingletonLock 2>/dev/null || true
-rm -rf /Users/admin/Library/Caches/ms-playwright/mcp-chrome-*/SingletonSocket 2>/dev/null || true
+rm -rf $HOME/Library/Caches/ms-playwright/mcp-chrome-*/SingletonLock 2>/dev/null || true
+rm -rf $HOME/Library/Caches/ms-playwright/mcp-chrome-*/SingletonSocket 2>/dev/null || true
 
 sleep 2
 echo "Playwright browser cleanup complete"
@@ -719,7 +719,7 @@ pkill -9 -f "Chrome"  # 모든 Chrome 종료 - 사용하지 마라!
 
 ```
 현재 프로젝트 경로 기준:
-  → /Users/admin/Desktop/workSpace/socar-backoffice-portal-frontend/docs/qa/latest/config.json
+  → $PROJECT_PATH/docs/qa/latest/config.json
 ```
 
 **config.json 필수 항목:**
@@ -872,7 +872,7 @@ else
   lsof -ti:3847 | xargs kill -9 2>/dev/null || true
 
   # 대시보드 시작 (SCENARIO_PATH 환경변수 필수!)
-  cd /Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard && \
+  cd $HOME/.claude/shared-agents/scripts/e2e-dashboard && \
   SCENARIO_PATH="{SCENARIO_PATH}" npm start > /tmp/e2e-dashboard.log 2>&1 &
 
   # 대시보드 준비 대기 (3초)
@@ -899,7 +899,7 @@ print(f'   그룹: {sorted(set(s[\"group\"] for s in d[\"scenarios\"]))}')"
 **--history 옵션 (대시보드 미실행 시 특정 이력 지정):**
 ```bash
 # 대시보드가 실행 중이 아닐 때 특정 이력으로 시작
-cd /Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard && \
+cd $HOME/.claude/shared-agents/scripts/e2e-dashboard && \
 SCENARIO_PATH="{SCENARIO_PATH}" HISTORY_FILE="{HISTORY_FILENAME}" npm start > /tmp/e2e-dashboard.log 2>&1 &
 ```
 
@@ -1041,7 +1041,7 @@ TC-005: -       → 실행 ⭐
 
 ```bash
 # SYNC 변수 설정 (테스트 시작 전 1회)
-SYNC="/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh"
+SYNC="$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh"
 
 # 대시보드 연결 확인
 curl -s http://localhost:3847/api/state > /dev/null && echo "Dashboard connected" || echo "Dashboard not running!"
@@ -1155,13 +1155,13 @@ curl -s http://localhost:3847/api/state | python3 -c "import sys,json; d=json.lo
 
 ```bash
 # ❌ 금지! 매번 권한 질의 발생
-SYNC="/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh"
+SYNC="$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh"
 $SYNC start ...
 $SYNC step ...
 
 # ✅ 필수! 직접 경로 사용 (권한 질의 없음)
-/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh start ...
-/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh step ...
+$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh start ...
+$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh step ...
 ```
 
 ### TC 실행 예시 (직접 경로 사용!)
@@ -1190,30 +1190,30 @@ for i,step in enumerate(tc['steps']): print(f'  {i}: {step}')"
 #   4: 메뉴 아이템 표시
 
 # 1️⃣ TC 시작
-/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh start "TC-MENU-E2E-001" "메뉴 목록 조회"
+$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh start "TC-MENU-E2E-001" "메뉴 목록 조회"
 
 # 2️⃣ 스텝 0: /adminMenu
 mcp__playwright__browser_navigate("/adminMenu")
-/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh step "TC-MENU-E2E-001" 0 pass "/adminMenu 페이지 이동"
+$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh step "TC-MENU-E2E-001" 0 pass "/adminMenu 페이지 이동"
 
 # 2️⃣ 스텝 1: 클라이언트 드롭다운
 mcp__playwright__browser_snapshot()
-/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh step "TC-MENU-E2E-001" 1 pass "클라이언트 드롭다운 확인"
+$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh step "TC-MENU-E2E-001" 1 pass "클라이언트 드롭다운 확인"
 
 # 2️⃣ 스텝 2: 클라이언트 선택
 mcp__playwright__browser_select_option(...)
-/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh step "TC-MENU-E2E-001" 2 pass "테크표준화 백오피스 선택"
+$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh step "TC-MENU-E2E-001" 2 pass "테크표준화 백오피스 선택"
 
 # 2️⃣ 스텝 3: 메뉴 트리 로드
 mcp__playwright__browser_wait_for({time: 2})
-/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh step "TC-MENU-E2E-001" 3 pass "메뉴 트리 로드 완료"
+$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh step "TC-MENU-E2E-001" 3 pass "메뉴 트리 로드 완료"
 
 # 2️⃣ 스텝 4: 메뉴 아이템 표시
 mcp__playwright__browser_snapshot()
-/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh step "TC-MENU-E2E-001" 4 pass "메뉴 아이템 표시 확인"
+$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh step "TC-MENU-E2E-001" 4 pass "메뉴 아이템 표시 확인"
 
 # 3️⃣ TC 완료 (5개 스텝 모두 완료 후!)
-/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh complete "TC-MENU-E2E-001" pass "메뉴 목록 조회 성공"
+$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh complete "TC-MENU-E2E-001" pass "메뉴 목록 조회 성공"
 ```
 
 ### ❌ 금지 패턴 vs ✅ 필수 패턴
@@ -1251,18 +1251,18 @@ mcp__playwright__browser_snapshot()
 ```bash
 # 스텝 실패 시 (직접 경로 사용!)
 mcp__playwright__browser_click(...)  # 실패!
-/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh step "TC-001" 2 fail "요소 찾기 실패"
+$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh step "TC-001" 2 fail "요소 찾기 실패"
 
 # TC 실패로 완료
-/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh complete "TC-001" fail "스텝 2에서 실패"
+$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh complete "TC-001" fail "스텝 2에서 실패"
 ```
 
 ### 스킵 처리
 
 ```bash
 # 사전조건 미충족으로 스킵 (직접 경로 사용!)
-/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh start "TC-001" "테스트명"
-/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh complete "TC-001" skip "사전조건 미충족"
+$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh start "TC-001" "테스트명"
+$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh complete "TC-001" skip "사전조건 미충족"
 ```
 
 ### 3단계: 결과 리포트
@@ -1465,10 +1465,10 @@ ${pendingTable}
 
 ### sync.sh 헬퍼 스크립트 (권장)
 
-`/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh` 사용:
+`$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh` 사용:
 
 ```bash
-SYNC="/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/sync.sh"
+SYNC="$HOME/.claude/shared-agents/scripts/e2e-dashboard/sync.sh"
 
 # TC 시작
 $SYNC start "TC-AUTH-E2E-001" "Keycloak 로그인 성공"

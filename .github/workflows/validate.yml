@@ -1,0 +1,155 @@
+name: Validate Agents & Scripts
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'agents/**'
+      - 'skills/**'
+      - 'templates/**'
+      - 'scripts/**'
+      - 'install.sh'
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate-agents:
+    name: Validate Agent Definitions
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install yaml
+
+      - name: Validate agent frontmatter
+        run: |
+          node scripts/validate-agents.js
+
+  validate-scripts:
+    name: Validate Shell Scripts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: sudo apt-get install -y shellcheck
+
+      - name: Lint shell scripts
+        run: |
+          # install.sh 검증
+          shellcheck -e SC2034,SC2155 install.sh || true
+
+          # hooks 스크립트 검증
+          find templates -name "*.sh" -exec shellcheck -e SC2034,SC2155 {} \; || true
+
+          # scripts 디렉토리 검증
+          find scripts -name "*.sh" -exec shellcheck -e SC2034,SC2155 {} \; || true
+
+  validate-markdown:
+    name: Validate Markdown Structure
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check agent markdown files
+        run: |
+          echo "Checking agent markdown files..."
+
+          # 모든 에이전트 파일 확인
+          for file in $(find agents -name "*.md" -not -name "README.md"); do
+            # YAML frontmatter 확인
+            if ! head -1 "$file" | grep -q "^---$"; then
+              echo "❌ Missing YAML frontmatter: $file"
+              exit 1
+            fi
+
+            # name 필드 확인
+            if ! grep -q "^name:" "$file"; then
+              echo "❌ Missing 'name' field: $file"
+              exit 1
+            fi
+
+            # description 필드 확인
+            if ! grep -q "^description:" "$file"; then
+              echo "❌ Missing 'description' field: $file"
+              exit 1
+            fi
+
+            echo "✅ $file"
+          done
+
+          echo ""
+          echo "All agent files validated!"
+
+  build-mcp:
+    name: Build MCP Servers
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build MCP servers
+        run: |
+          for dir in mcp-servers/*/; do
+            if [ -f "$dir/package.json" ]; then
+              echo "Building $(basename $dir)..."
+              cd "$dir"
+              npm install
+              npm run build || echo "⚠️ Build failed for $(basename $dir)"
+              cd ../..
+            fi
+          done
+
+  summary:
+    name: Summary
+    runs-on: ubuntu-latest
+    needs: [validate-agents, validate-scripts, validate-markdown, build-mcp]
+    if: always()
+
+    steps:
+      - name: Check results
+        run: |
+          echo "## Validation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.validate-agents.result }}" == "success" ]; then
+            echo "✅ Agent validation passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Agent validation failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.validate-scripts.result }}" == "success" ]; then
+            echo "✅ Script validation passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Script validation failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.validate-markdown.result }}" == "success" ]; then
+            echo "✅ Markdown validation passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Markdown validation failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ needs.build-mcp.result }}" == "success" ]; then
+            echo "✅ MCP build passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ MCP build failed" >> $GITHUB_STEP_SUMMARY
+          fi

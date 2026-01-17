@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Shared Claude Agents - Install Script
+# Shared Claude Agents - Install Script (Modular Version)
 #
 # 이 스크립트는 글로벌 설치만 하면 됩니다.
 # 설치 후 어떤 프로젝트에서든 Claude를 시작하면 자동으로:
@@ -15,628 +15,627 @@
 
 set -e
 
-# 색상 정의
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+# =============================================================================
+# 설정 변수 (Configuration)
+# =============================================================================
+readonly RED='\033[0;31m'
+readonly GREEN='\033[0;32m'
+readonly YELLOW='\033[1;33m'
+readonly BLUE='\033[0;34m'
+readonly CYAN='\033[0;36m'
+readonly NC='\033[0m'
 
-# 경로 설정
-SHARED_DIR="$HOME/.claude/shared-agents"
-AGENTS_LINK="$HOME/.claude/agents"
-SETTINGS_FILE="$HOME/.claude/settings.json"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-MCP_SERVERS_DIR="$SCRIPT_DIR/mcp-servers"
+readonly SHARED_DIR="${SHARED_AGENTS_DIR:-$HOME/.claude/shared-agents}"
+readonly AGENTS_LINK="$HOME/.claude/agents"
+readonly SETTINGS_FILE="$HOME/.claude/settings.json"
+readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+readonly MCP_SERVERS_DIR="$SCRIPT_DIR/mcp-servers"
 
-# 프로젝트 경로 (인자로 받음)
 PROJECT_PATH="$1"
+BUILD_MCP=false
 
-echo ""
-echo "=========================================="
-echo "  Shared Claude Agents Installer"
-echo "=========================================="
-echo ""
-
-# -----------------------------------------------------------------------------
-# Step 0: Node.js 버전 확인 (MCP 서버용)
-# -----------------------------------------------------------------------------
-echo -e "${YELLOW}[0/7]${NC} Checking Node.js version..."
-
-if ! command -v node &> /dev/null; then
-    echo -e "       ${YELLOW}Warning:${NC} Node.js not found. MCP servers will not be built."
-    echo -e "       Install Node.js 18+ to use MCP servers: https://nodejs.org/"
-    BUILD_MCP=false
-else
-    NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
-    if [ "$NODE_VERSION" -lt 18 ]; then
-        echo -e "       ${YELLOW}Warning:${NC} Node.js 18+ required for MCP servers. (current: $(node -v))"
-        BUILD_MCP=false
-    else
-        echo -e "       ${GREEN}Node.js $(node -v) found${NC}"
-        BUILD_MCP=true
-    fi
-fi
-echo ""
-
-# 1. 현재 위치가 표준 위치가 아니면 심볼릭 링크 생성
-if [ "$SCRIPT_DIR" != "$SHARED_DIR" ]; then
-    echo -e "${YELLOW}[1/7]${NC} Linking to $SHARED_DIR..."
-
-    # 기존 디렉토리/링크가 있으면 처리
-    if [ -L "$SHARED_DIR" ]; then
-        # 이미 심볼릭 링크면 삭제
-        echo "       Removing existing symlink..."
-        rm "$SHARED_DIR"
-    elif [ -d "$SHARED_DIR" ]; then
-        # 실제 디렉토리면 백업
-        BACKUP_DIR="$SHARED_DIR.backup.$(date +%Y%m%d%H%M%S)"
-        echo "       Backing up existing to $BACKUP_DIR"
-        mv "$SHARED_DIR" "$BACKUP_DIR"
-    fi
-
-    mkdir -p "$(dirname "$SHARED_DIR")"
-    ln -s "$SCRIPT_DIR" "$SHARED_DIR"
-    echo -e "       ${GREEN}Linked:${NC} $SHARED_DIR -> $SCRIPT_DIR"
-else
-    echo -e "${GREEN}[1/7]${NC} Already in standard location"
-fi
-
-# 2. 기존 에이전트 확인 및 보호
-echo -e "${YELLOW}[2/7]${NC} Checking existing agents..."
-
-if [ -d "$AGENTS_LINK" ] && [ ! -L "$AGENTS_LINK" ]; then
-    echo -e "       ${YELLOW}Warning:${NC} Existing agents folder found at $AGENTS_LINK"
-    echo ""
-    echo "       How would you like to handle existing agents?"
-    echo "       1) Backup and replace with shared agents (recommended)"
-    echo "       2) Merge - copy shared agents, keep existing (may override)"
-    echo "       3) Keep existing, skip installation"
-    echo ""
-    read -p "       Select option (1/2/3): " -n 1 -r AGENT_OPTION
-    echo ""
-
-    case $AGENT_OPTION in
-        1)
-            BACKUP_DIR="$AGENTS_LINK.backup.$(date +%Y%m%d%H%M%S)"
-            echo -e "       Backing up existing to $BACKUP_DIR"
-            mv "$AGENTS_LINK" "$BACKUP_DIR"
-            ;;
-        2)
-            echo -e "       Merging agents..."
-            # 기존 폴더 내 에이전트 유지, 새 에이전트만 복사
-            for dir in "$SHARED_DIR/agents"/*/; do
-                dirname=$(basename "$dir")
-                if [ -d "$AGENTS_LINK/$dirname" ]; then
-                    echo -e "       ${YELLOW}Skipping${NC} $dirname (already exists)"
-                else
-                    cp -r "$dir" "$AGENTS_LINK/"
-                    echo -e "       ${GREEN}Added${NC} $dirname"
-                fi
-            done
-            echo -e "       ${GREEN}Merge complete${NC}"
-            echo ""
-            echo "       Note: Shared agents were added to existing folder."
-            echo "       Auto-update hook will NOT be configured for merged setup."
-            exit 0
-            ;;
-        3)
-            echo -e "       ${YELLOW}Skipping agent installation${NC}"
-            exit 0
-            ;;
-        *)
-            echo -e "       ${RED}Invalid option. Aborting.${NC}"
-            exit 1
-            ;;
-    esac
-elif [ -L "$AGENTS_LINK" ]; then
-    echo "       Existing symlink found. Removing..."
-    rm "$AGENTS_LINK"
-fi
-
-echo -e "       ${GREEN}Done${NC}"
-
-# 3. Symlink 생성
-echo -e "${YELLOW}[3/7]${NC} Creating symlink..."
-
-ln -s "$SHARED_DIR/agents" "$AGENTS_LINK"
-echo -e "       ${GREEN}Linked:${NC} $AGENTS_LINK -> $SHARED_DIR/agents"
-
-# 4. Standards/Skills/Rules 심볼릭 링크 (있으면)
-echo -e "${YELLOW}[4/7]${NC} Linking additional resources..."
-
-# Standards
-if [ -d "$SHARED_DIR/standards" ]; then
-    if [ -L "$HOME/.claude/standards" ]; then
-        rm "$HOME/.claude/standards"
-    fi
-    if [ ! -d "$HOME/.claude/standards" ]; then
-        ln -s "$SHARED_DIR/standards" "$HOME/.claude/standards"
-        echo -e "       ${GREEN}Linked:${NC} standards"
-    fi
-fi
-
-# Skills
-if [ -d "$SHARED_DIR/skills" ]; then
-    if [ -L "$HOME/.claude/skills" ]; then
-        rm "$HOME/.claude/skills"
-    fi
-    if [ ! -d "$HOME/.claude/skills" ]; then
-        ln -s "$SHARED_DIR/skills" "$HOME/.claude/skills"
-        echo -e "       ${GREEN}Linked:${NC} skills"
-    fi
-fi
-
-# Rules
-if [ -f "$SHARED_DIR/RULES.md" ]; then
-    if [ -L "$HOME/.claude/RULES.md" ]; then
-        rm "$HOME/.claude/RULES.md"
-    fi
-    if [ ! -f "$HOME/.claude/RULES.md" ]; then
-        ln -s "$SHARED_DIR/RULES.md" "$HOME/.claude/RULES.md"
-        echo -e "       ${GREEN}Linked:${NC} RULES.md"
-    fi
-fi
-
-# Scripts (qa-input-form 등)
-if [ -d "$SHARED_DIR/scripts" ]; then
-    if [ -L "$HOME/.claude/scripts" ]; then
-        rm "$HOME/.claude/scripts"
-    fi
-    if [ ! -d "$HOME/.claude/scripts" ]; then
-        ln -s "$SHARED_DIR/scripts" "$HOME/.claude/scripts"
-        echo -e "       ${GREEN}Linked:${NC} scripts"
-
-        # qa-input-form 의존성 설치
-        if [ "$BUILD_MCP" = true ] && [ -d "$SHARED_DIR/scripts/qa-input-form" ]; then
-            echo -e "       Installing qa-input-form dependencies..."
-            cd "$SHARED_DIR/scripts/qa-input-form"
-            npm install --silent 2>/dev/null || npm install
-            cd "$SCRIPT_DIR"
-            echo -e "       ${GREEN}✅ qa-input-form ready${NC}"
-        fi
-
-        # e2e-dashboard 의존성 설치
-        if [ "$BUILD_MCP" = true ] && [ -d "$SHARED_DIR/scripts/e2e-dashboard" ]; then
-            echo -e "       Installing e2e-dashboard dependencies..."
-            cd "$SHARED_DIR/scripts/e2e-dashboard"
-            npm install --silent 2>/dev/null || npm install
-            cd "$SCRIPT_DIR"
-            echo -e "       ${GREEN}✅ e2e-dashboard ready${NC}"
-        fi
-    fi
-fi
-
-echo -e "       ${GREEN}Done${NC}"
-
-# 5. SessionStart Hook 및 MCP 권한 설정
-echo -e "${YELLOW}[5/7]${NC} Configuring SessionStart hook and MCP permissions..."
-
-# 글로벌 SessionStart hook - 모든 프로젝트에서 자동 설정
-HOOK_COMMAND="bash \"\$HOME/.claude/shared-agents/scripts/auto-project-setup.sh\" 2>/dev/null || true"
-
-# 자동 승인 도구 목록 (MCP + 기본 도구 + QA 도구)
+# 자동 승인 도구 목록
 MCP_ALLOWED_TOOLS=(
-    # 기본 도구
-    "Read"
-    "Write"
-    "Edit(docs/qa/**)"
-    "WebFetch"
-    "Task"
-
-    # MCP 서버 도구
-    "mcp__qa-pipeline__*"
-    "mcp__doc-converter__*"
-    "mcp__puppeteer-browser__*"
-    "mcp__atlassian__*"
-    "mcp__playwright__*"
-    "mcp__appium-mcp__*"
-    "mcp__swagger-mcp__*"
-    "mcp__figma__*"
-
-    # QA 스킬 도구
-    "Skill(e2e-test:*)"
-    "Skill(api-test:*)"
-    "Skill(qa-scenario:*)"
-
-    # Bash 기본 명령
-    "Bash(node:*)"
-    "Bash(npm:*)"
-    "Bash(npx:*)"
-    "Bash(git status:*)"
-    "Bash(git diff:*)"
-    "Bash(ls:*)"
-    "Bash(pwd)"
-    "Bash(find:*)"
-    "Bash(mkdir:*)"
-    "Bash(cat:*)"
-    "Bash(cat >:*)"
-    "Bash(chmod:*)"
-    # 재미나이 cli 자동승인
-    "Bash(gemini:*)"
-    # Claude Code 서브에이전트 자동 승인
-    "Bash(claude-code task:*)"
-    # MCP task 명령 자동승인
-    "Bash(mcp task:*)"
-
-    # QA E2E 대시보드
-    "Bash(*/e2e-dashboard/start.sh:*)"
-    "Bash(*/e2e-dashboard/sync.sh:*)"
-    "Bash(./sync.sh:*)"
-    "Bash(SYNC=*)"
-    "Bash(\$SYNC:*)"
-    "Bash(curl:*)"
-    "Bash(python3:*)"
-
-    # 프로세스 관리
-    "Bash(lsof:*)"
-    "Bash(pkill:*)"
-    "Bash(xargs kill -9)"
+    "Read" "Write" "Edit(docs/qa/**)" "WebFetch" "Task"
+    "mcp__qa-pipeline__*" "mcp__doc-converter__*" "mcp__puppeteer-browser__*"
+    "mcp__atlassian__*" "mcp__playwright__*" "mcp__appium-mcp__*"
+    "mcp__swagger-mcp__*" "mcp__figma__*"
+    "Skill(e2e-test:*)" "Skill(api-test:*)" "Skill(qa-scenario:*)"
+    "Bash(node:*)" "Bash(npm:*)" "Bash(npx:*)" "Bash(git status:*)"
+    "Bash(git diff:*)" "Bash(ls:*)" "Bash(pwd)" "Bash(find:*)"
+    "Bash(mkdir:*)" "Bash(cat:*)" "Bash(cat >:*)" "Bash(chmod:*)"
+    "Bash(gemini:*)" "Bash(claude-code task:*)" "Bash(mcp task:*)"
+    "Bash(*/e2e-dashboard/start.sh:*)" "Bash(*/e2e-dashboard/sync.sh:*)"
+    "Bash(./sync.sh:*)" "Bash(SYNC=*)" "Bash(\$SYNC:*)"
+    "Bash(curl:*)" "Bash(python3:*)"
+    "Bash(lsof:*)" "Bash(pkill:*)" "Bash(xargs kill -9)"
 )
 
-# settings.json이 없으면 생성
-if [ ! -f "$SETTINGS_FILE" ]; then
-    echo '{}' > "$SETTINGS_FILE"
-fi
+# =============================================================================
+# 유틸리티 함수 (Utility Functions)
+# =============================================================================
 
-# jq가 있으면 사용, 없으면 수동 안내
-if command -v jq &> /dev/null; then
-    # hooks.SessionStart가 없으면 추가
-    UPDATED=$(jq --arg cmd "$HOOK_COMMAND" '
+log_step() {
+    local step=$1
+    local total=$2
+    local message=$3
+    echo -e "${YELLOW}[$step/$total]${NC} $message"
+}
+
+log_success() {
+    echo -e "       ${GREEN}$1${NC}"
+}
+
+log_warning() {
+    echo -e "       ${YELLOW}$1${NC}"
+}
+
+log_error() {
+    echo -e "       ${RED}$1${NC}"
+}
+
+create_symlink() {
+    local source=$1
+    local target=$2
+    local name=$3
+
+    if [ -L "$target" ]; then
+        rm "$target"
+    elif [ -e "$target" ]; then
+        local backup="${target}.backup.$(date +%Y%m%d%H%M%S)"
+        mv "$target" "$backup"
+        log_warning "Backed up: $(basename $backup)"
+    fi
+    ln -s "$source" "$target"
+    log_success "✓ $name → Symlink"
+}
+
+# =============================================================================
+# Step 0: Node.js 버전 확인
+# =============================================================================
+check_nodejs() {
+    log_step 0 7 "Checking Node.js version..."
+
+    if ! command -v node &> /dev/null; then
+        log_warning "Warning: Node.js not found. MCP servers will not be built."
+        log_warning "Install Node.js 18+ to use MCP servers: https://nodejs.org/"
+        BUILD_MCP=false
+    else
+        local node_version=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
+        if [ "$node_version" -lt 18 ]; then
+            log_warning "Warning: Node.js 18+ required for MCP servers. (current: $(node -v))"
+            BUILD_MCP=false
+        else
+            log_success "Node.js $(node -v) found"
+            BUILD_MCP=true
+        fi
+    fi
+    echo ""
+}
+
+# =============================================================================
+# Step 1: 표준 위치 링크
+# =============================================================================
+link_to_standard_location() {
+    if [ "$SCRIPT_DIR" != "$SHARED_DIR" ]; then
+        log_step 1 7 "Linking to $SHARED_DIR..."
+
+        if [ -L "$SHARED_DIR" ]; then
+            echo "       Removing existing symlink..."
+            rm "$SHARED_DIR"
+        elif [ -d "$SHARED_DIR" ]; then
+            local backup="$SHARED_DIR.backup.$(date +%Y%m%d%H%M%S)"
+            echo "       Backing up existing to $backup"
+            mv "$SHARED_DIR" "$backup"
+        fi
+
+        mkdir -p "$(dirname "$SHARED_DIR")"
+        ln -s "$SCRIPT_DIR" "$SHARED_DIR"
+        log_success "Linked: $SHARED_DIR -> $SCRIPT_DIR"
+    else
+        echo -e "${GREEN}[1/7]${NC} Already in standard location"
+    fi
+}
+
+# =============================================================================
+# Step 2: 기존 에이전트 확인 및 처리
+# =============================================================================
+handle_existing_agents() {
+    log_step 2 7 "Checking existing agents..."
+
+    if [ -d "$AGENTS_LINK" ] && [ ! -L "$AGENTS_LINK" ]; then
+        log_warning "Warning: Existing agents folder found at $AGENTS_LINK"
+        echo ""
+        echo "       How would you like to handle existing agents?"
+        echo "       1) Backup and replace with shared agents (recommended)"
+        echo "       2) Merge - copy shared agents, keep existing (may override)"
+        echo "       3) Keep existing, skip installation"
+        echo ""
+        read -p "       Select option (1/2/3): " -n 1 -r AGENT_OPTION
+        echo ""
+
+        case $AGENT_OPTION in
+            1)
+                local backup="$AGENTS_LINK.backup.$(date +%Y%m%d%H%M%S)"
+                echo -e "       Backing up existing to $backup"
+                mv "$AGENTS_LINK" "$backup"
+                ;;
+            2)
+                echo -e "       Merging agents..."
+                for dir in "$SHARED_DIR/agents"/*/; do
+                    local dirname=$(basename "$dir")
+                    if [ -d "$AGENTS_LINK/$dirname" ]; then
+                        log_warning "Skipping $dirname (already exists)"
+                    else
+                        cp -r "$dir" "$AGENTS_LINK/"
+                        log_success "Added $dirname"
+                    fi
+                done
+                log_success "Merge complete"
+                echo ""
+                echo "       Note: Shared agents were added to existing folder."
+                echo "       Auto-update hook will NOT be configured for merged setup."
+                exit 0
+                ;;
+            3)
+                log_warning "Skipping agent installation"
+                exit 0
+                ;;
+            *)
+                log_error "Invalid option. Aborting."
+                exit 1
+                ;;
+        esac
+    elif [ -L "$AGENTS_LINK" ]; then
+        echo "       Existing symlink found. Removing..."
+        rm "$AGENTS_LINK"
+    fi
+
+    log_success "Done"
+}
+
+# =============================================================================
+# Step 3: 에이전트 심볼릭 링크 생성
+# =============================================================================
+create_agents_symlink() {
+    log_step 3 7 "Creating symlink..."
+    ln -s "$SHARED_DIR/agents" "$AGENTS_LINK"
+    log_success "Linked: $AGENTS_LINK -> $SHARED_DIR/agents"
+}
+
+# =============================================================================
+# Step 4: 추가 리소스 링크 (standards, skills, rules, scripts)
+# =============================================================================
+link_additional_resources() {
+    log_step 4 7 "Linking additional resources..."
+
+    # Standards
+    if [ -d "$SHARED_DIR/standards" ]; then
+        [ -L "$HOME/.claude/standards" ] && rm "$HOME/.claude/standards"
+        [ ! -d "$HOME/.claude/standards" ] && {
+            ln -s "$SHARED_DIR/standards" "$HOME/.claude/standards"
+            log_success "Linked: standards"
+        }
+    fi
+
+    # Skills
+    if [ -d "$SHARED_DIR/skills" ]; then
+        [ -L "$HOME/.claude/skills" ] && rm "$HOME/.claude/skills"
+        [ ! -d "$HOME/.claude/skills" ] && {
+            ln -s "$SHARED_DIR/skills" "$HOME/.claude/skills"
+            log_success "Linked: skills"
+        }
+    fi
+
+    # Rules
+    if [ -f "$SHARED_DIR/RULES.md" ]; then
+        [ -L "$HOME/.claude/RULES.md" ] && rm "$HOME/.claude/RULES.md"
+        [ ! -f "$HOME/.claude/RULES.md" ] && {
+            ln -s "$SHARED_DIR/RULES.md" "$HOME/.claude/RULES.md"
+            log_success "Linked: RULES.md"
+        }
+    fi
+
+    # Scripts
+    if [ -d "$SHARED_DIR/scripts" ]; then
+        [ -L "$HOME/.claude/scripts" ] && rm "$HOME/.claude/scripts"
+        if [ ! -d "$HOME/.claude/scripts" ]; then
+            ln -s "$SHARED_DIR/scripts" "$HOME/.claude/scripts"
+            log_success "Linked: scripts"
+            install_script_dependencies
+        fi
+    fi
+
+    log_success "Done"
+}
+
+install_script_dependencies() {
+    if [ "$BUILD_MCP" = true ]; then
+        # qa-input-form
+        if [ -d "$SHARED_DIR/scripts/qa-input-form" ]; then
+            echo -e "       Installing qa-input-form dependencies..."
+            (cd "$SHARED_DIR/scripts/qa-input-form" && npm install --silent 2>/dev/null || npm install)
+            log_success "✅ qa-input-form ready"
+        fi
+
+        # e2e-dashboard
+        if [ -d "$SHARED_DIR/scripts/e2e-dashboard" ]; then
+            echo -e "       Installing e2e-dashboard dependencies..."
+            (cd "$SHARED_DIR/scripts/e2e-dashboard" && npm install --silent 2>/dev/null || npm install)
+            log_success "✅ e2e-dashboard ready"
+        fi
+    fi
+}
+
+# =============================================================================
+# Step 5: SessionStart Hook 및 MCP 권한 설정
+# =============================================================================
+configure_hooks_and_permissions() {
+    log_step 5 7 "Configuring SessionStart hook and MCP permissions..."
+
+    local hook_command="bash \"\$HOME/.claude/shared-agents/scripts/auto-project-setup.sh\" 2>/dev/null || true"
+
+    # settings.json 생성
+    [ ! -f "$SETTINGS_FILE" ] && echo '{}' > "$SETTINGS_FILE"
+
+    if command -v jq &> /dev/null; then
+        configure_with_jq "$hook_command"
+    else
+        show_manual_config "$hook_command"
+    fi
+}
+
+configure_with_jq() {
+    local hook_command=$1
+
+    # Hook 설정
+    local updated=$(jq --arg cmd "$hook_command" '
         .hooks.SessionStart //= [] |
         if (.hooks.SessionStart | map(select(.hooks[0].command == $cmd)) | length) == 0
         then .hooks.SessionStart += [{"hooks": [{"type": "command", "command": $cmd}]}]
         else .
         end
     ' "$SETTINGS_FILE")
-    echo "$UPDATED" > "$SETTINGS_FILE"
-    echo -e "       ${GREEN}Hook configured${NC}"
+    echo "$updated" > "$SETTINGS_FILE"
+    log_success "Hook configured"
 
-    # permissions.allow 추가 (MCP 도구 자동 승인)
-    ALLOW_JSON=$(printf '%s\n' "${MCP_ALLOWED_TOOLS[@]}" | jq -R . | jq -s .)
-    UPDATED=$(jq --argjson allow "$ALLOW_JSON" '
+    # 권한 설정
+    local allow_json=$(printf '%s\n' "${MCP_ALLOWED_TOOLS[@]}" | jq -R . | jq -s .)
+    updated=$(jq --argjson allow "$allow_json" '
         .permissions.allow //= [] |
         .permissions.allow = (.permissions.allow + $allow | unique)
     ' "$SETTINGS_FILE")
-    echo "$UPDATED" > "$SETTINGS_FILE"
-    echo -e "       ${GREEN}MCP permissions configured (auto-approve enabled)${NC}"
-else
-    echo -e "       ${YELLOW}jq not found. Please add manually to $SETTINGS_FILE:${NC}"
-    echo ""
-    echo '  "permissions": {'
-    echo '    "allow": ['
-    for tool in "${MCP_ALLOWED_TOOLS[@]}"; do
-        echo "      \"$tool\","
-    done
-    echo '    ]'
-    echo '  },'
-    echo '  "hooks": {'
-    echo '    "SessionStart": [{'
-    echo '      "hooks": [{'
-    echo '        "type": "command",'
-    echo "        \"command\": \"$HOOK_COMMAND\""
-    echo '      }]'
-    echo '    }]'
-    echo '  }'
-    echo ""
-fi
-
-# 6. MCP 서버 빌드 및 설정
-echo -e "${YELLOW}[6/7]${NC} Building MCP servers..."
-
-if [ "$BUILD_MCP" = true ] && [ -d "$MCP_SERVERS_DIR" ]; then
-    MCP_SERVERS_BUILT=()
-
-    for server_dir in "$MCP_SERVERS_DIR"/*/; do
-        if [ -d "$server_dir" ]; then
-            server_name=$(basename "$server_dir")
-
-            if [ -f "$server_dir/package.json" ]; then
-                echo -e "       📦 Building $server_name..."
-
-                cd "$server_dir"
-                npm install --silent 2>/dev/null || npm install
-                npm run build --silent 2>/dev/null || npm run build
-                cd "$SCRIPT_DIR"
-
-                # dist/index.js가 있으면 설정에 추가
-                if [ -f "$server_dir/dist/index.js" ]; then
-                    echo -e "       ${GREEN}✅ $server_name built successfully${NC}"
-                    MCP_SERVERS_BUILT+=("$server_name")
-                else
-                    echo -e "       ${RED}❌ $server_name build failed${NC}"
-                fi
-            fi
-        fi
-    done
-
-    # claude mcp add 명령으로 MCP 서버 등록
-    if [ ${#MCP_SERVERS_BUILT[@]} -gt 0 ]; then
-        echo ""
-        echo -e "       Registering MCP servers with Claude Code..."
-
-        # claude 명령이 있는지 확인
-        if command -v claude &> /dev/null; then
-            for server_name in "${MCP_SERVERS_BUILT[@]}"; do
-                SERVER_PATH="$SHARED_DIR/mcp-servers/$server_name/dist/index.js"
-
-                # 기존 등록 제거 후 재등록 (오류 무시)
-                claude mcp remove -s user "$server_name" 2>/dev/null || true
-
-                # 전역으로 MCP 서버 등록
-                if claude mcp add -s user "$server_name" node "$SERVER_PATH" 2>/dev/null; then
-                    echo -e "       ${GREEN}✅ $server_name registered${NC}"
-                else
-                    echo -e "       ${YELLOW}⚠️  $server_name registration failed (try manually: claude mcp add -s user $server_name node $SERVER_PATH)${NC}"
-                fi
-            done
-        else
-            echo -e "       ${YELLOW}⚠️  'claude' command not found. Please register MCP servers manually:${NC}"
-            for server_name in "${MCP_SERVERS_BUILT[@]}"; do
-                echo -e "       claude mcp add -s user $server_name node $SHARED_DIR/mcp-servers/$server_name/dist/index.js"
-            done
-        fi
-    fi
-else
-    if [ "$BUILD_MCP" = false ]; then
-        echo -e "       ${YELLOW}⚠️  Skipped (Node.js 18+ required)${NC}"
-    else
-        echo -e "       ${YELLOW}⚠️  No MCP servers found${NC}"
-    fi
-fi
-
-# External MCP 서버 등록 (npx 기반)
-echo ""
-echo -e "       Registering external MCP servers..."
-
-if command -v claude &> /dev/null; then
-    # Playwright MCP (Microsoft 공식 - 브라우저 자동화 및 E2E 테스트)
-    claude mcp remove -s user playwright 2>/dev/null || true
-    if claude mcp add -s user playwright npx @playwright/mcp@latest 2>/dev/null; then
-        echo -e "       ${GREEN}✅ playwright registered (Web E2E testing)${NC}"
-    else
-        echo -e "       ${YELLOW}⚠️  playwright registration failed${NC}"
-    fi
-
-    # Appium MCP (공식 - 모바일 앱 테스트 Android/iOS)
-    claude mcp remove -s user appium-mcp 2>/dev/null || true
-    if claude mcp add -s user appium-mcp -- npx -y appium-mcp@latest 2>/dev/null; then
-        echo -e "       ${GREEN}✅ appium-mcp registered (Mobile app testing)${NC}"
-    else
-        echo -e "       ${YELLOW}⚠️  appium-mcp registration failed${NC}"
-    fi
-
-    # Swagger/OpenAPI MCP (API 명세서 분석)
-    claude mcp remove -s user swagger-mcp 2>/dev/null || true
-    if claude mcp add -s user swagger-mcp -- npx -y @anthropic-community/swagger-mcp-server 2>/dev/null; then
-        echo -e "       ${GREEN}✅ swagger-mcp registered (API spec analysis)${NC}"
-    else
-        echo -e "       ${YELLOW}⚠️  swagger-mcp registration failed${NC}"
-    fi
-
-    # Figma MCP (화면설계서)
-    claude mcp remove -s user figma 2>/dev/null || true
-    if claude mcp add -s user figma -- npx -y figma-developer-mcp --stdio 2>/dev/null; then
-        echo -e "       ${GREEN}✅ figma registered (UI design)${NC}"
-    else
-        echo -e "       ${YELLOW}⚠️  figma registration failed (requires Figma Desktop)${NC}"
-    fi
-
-    # Atlassian MCP (Confluence/Jira - SSE transport)
-    claude mcp remove -s user atlassian 2>/dev/null || true
-    if claude mcp add -s user --transport sse atlassian https://mcp.atlassian.com/v1/sse 2>/dev/null; then
-        echo -e "       ${GREEN}✅ atlassian registered (Confluence/Jira)${NC}"
-        echo -e "       ${YELLOW}📌 OAuth 인증 필요: Claude Code 재시작 후 /mcp → atlassian 선택하여 인증${NC}"
-    else
-        echo -e "       ${YELLOW}⚠️  atlassian registration failed${NC}"
-    fi
-else
-    echo -e "       ${YELLOW}⚠️  'claude' command not found. Please register external MCP servers manually:${NC}"
-    echo -e "       claude mcp add -s user playwright npx @playwright/mcp@latest"
-    echo -e "       claude mcp add -s user appium-mcp -- npx -y appium-mcp@latest"
-    echo -e "       claude mcp add -s user swagger-mcp -- npx -y @anthropic-community/swagger-mcp-server"
-    echo -e "       claude mcp add -s user figma -- npx -y figma-developer-mcp --stdio"
-    echo -e "       claude mcp add -s user --transport sse atlassian https://mcp.atlassian.com/v1/sse"
-fi
-
-echo ""
-
-# -----------------------------------------------------------------------------
-# Step 7: 프로젝트 설정 (인자로 경로가 주어진 경우)
-# -----------------------------------------------------------------------------
-echo ""
-
-# 프로젝트별 리소스 설정 함수
-setup_project_resource() {
-    local name=$1
-    local source=$2
-    local target=$3
-    local is_dir=$4
-
-    if [ -L "$target" ]; then
-        rm "$target"
-    elif [ -e "$target" ]; then
-        BACKUP_PATH="${target}.backup.$(date +%Y%m%d%H%M%S)"
-        mv "$target" "$BACKUP_PATH"
-        echo -e "       ${YELLOW}Backed up:${NC} $(basename $BACKUP_PATH)"
-    fi
-    ln -s "$source" "$target"
-    echo -e "       ${GREEN}✓${NC} $name → Symlink"
+    echo "$updated" > "$SETTINGS_FILE"
+    log_success "MCP permissions configured (auto-approve enabled)"
 }
 
-if [ -n "$PROJECT_PATH" ]; then
-    # 절대 경로로 변환
-    if [[ "$PROJECT_PATH" != /* ]]; then
-        PROJECT_PATH="$(pwd)/$PROJECT_PATH"
+show_manual_config() {
+    local hook_command=$1
+    log_warning "jq not found. Please add manually to $SETTINGS_FILE:"
+    echo ""
+    echo '  "permissions": { "allow": ['
+    for tool in "${MCP_ALLOWED_TOOLS[@]}"; do
+        echo "    \"$tool\","
+    done
+    echo '  ]},'
+    echo '  "hooks": { "SessionStart": [{ "hooks": [{ "type": "command",'
+    echo "    \"command\": \"$hook_command\""
+    echo '  }]}]}'
+}
+
+# =============================================================================
+# Step 6: MCP 서버 빌드 및 등록
+# =============================================================================
+build_and_register_mcp_servers() {
+    log_step 6 7 "Building MCP servers..."
+
+    if [ "$BUILD_MCP" = true ] && [ -d "$MCP_SERVERS_DIR" ]; then
+        build_local_mcp_servers
+        register_external_mcp_servers
+    else
+        if [ "$BUILD_MCP" = false ]; then
+            log_warning "⚠️  Skipped (Node.js 18+ required)"
+        else
+            log_warning "⚠️  No MCP servers found"
+        fi
+    fi
+    echo ""
+}
+
+build_local_mcp_servers() {
+    local servers_built=()
+
+    for server_dir in "$MCP_SERVERS_DIR"/*/; do
+        [ ! -d "$server_dir" ] && continue
+
+        local server_name=$(basename "$server_dir")
+        [ ! -f "$server_dir/package.json" ] && continue
+
+        echo -e "       📦 Building $server_name..."
+        (cd "$server_dir" && npm install --silent 2>/dev/null || npm install)
+        (cd "$server_dir" && npm run build --silent 2>/dev/null || npm run build)
+
+        if [ -f "$server_dir/dist/index.js" ]; then
+            log_success "✅ $server_name built successfully"
+            servers_built+=("$server_name")
+        else
+            log_error "❌ $server_name build failed"
+        fi
+    done
+
+    # 빌드된 서버 등록
+    if [ ${#servers_built[@]} -gt 0 ] && command -v claude &> /dev/null; then
+        echo ""
+        echo -e "       Registering MCP servers with Claude Code..."
+        for server_name in "${servers_built[@]}"; do
+            local server_path="$SHARED_DIR/mcp-servers/$server_name/dist/index.js"
+            claude mcp remove -s user "$server_name" 2>/dev/null || true
+            if claude mcp add -s user "$server_name" node "$server_path" 2>/dev/null; then
+                log_success "✅ $server_name registered"
+            else
+                log_warning "⚠️  $server_name registration failed"
+            fi
+        done
+    fi
+}
+
+register_external_mcp_servers() {
+    echo ""
+    echo -e "       Registering external MCP servers..."
+
+    if ! command -v claude &> /dev/null; then
+        log_warning "⚠️  'claude' command not found. Please register manually."
+        return
     fi
 
-    # 프로젝트 폴더 존재 확인
+    # Playwright
+    register_mcp_server "playwright" "npx @playwright/mcp@latest" "Web E2E testing"
+
+    # Appium
+    register_mcp_server "appium-mcp" "-- npx -y appium-mcp@latest" "Mobile app testing"
+
+    # Swagger
+    register_mcp_server "swagger-mcp" "-- npx -y @anthropic-community/swagger-mcp-server" "API spec analysis"
+
+    # Figma
+    register_mcp_server "figma" "-- npx -y figma-developer-mcp --stdio" "UI design"
+
+    # Atlassian (SSE transport)
+    claude mcp remove -s user atlassian 2>/dev/null || true
+    if claude mcp add -s user --transport sse atlassian https://mcp.atlassian.com/v1/sse 2>/dev/null; then
+        log_success "✅ atlassian registered (Confluence/Jira)"
+        log_warning "📌 OAuth 인증 필요: Claude Code 재시작 후 /mcp → atlassian 선택하여 인증"
+    else
+        log_warning "⚠️  atlassian registration failed"
+    fi
+}
+
+register_mcp_server() {
+    local name=$1
+    local command=$2
+    local description=$3
+
+    claude mcp remove -s user "$name" 2>/dev/null || true
+    if claude mcp add -s user $name $command 2>/dev/null; then
+        log_success "✅ $name registered ($description)"
+    else
+        log_warning "⚠️  $name registration failed"
+    fi
+}
+
+# =============================================================================
+# Step 7: 프로젝트 설정 (선택)
+# =============================================================================
+setup_project() {
+    if [ -z "$PROJECT_PATH" ]; then
+        echo -e "${GREEN}[7/7]${NC} Skipped (no project path provided)"
+        return
+    fi
+
+    # 절대 경로 변환
+    [[ "$PROJECT_PATH" != /* ]] && PROJECT_PATH="$(pwd)/$PROJECT_PATH"
+
+    # 프로젝트 폴더 확인
     if [ ! -d "$PROJECT_PATH" ]; then
-        echo -e "${YELLOW}Warning: $PROJECT_PATH does not exist${NC}"
+        log_warning "Warning: $PROJECT_PATH does not exist"
         read -p "Create the folder? (y/n): " -n 1 -r
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
             mkdir -p "$PROJECT_PATH"
-            echo -e "${GREEN}Created: $PROJECT_PATH${NC}"
+            log_success "Created: $PROJECT_PATH"
         else
-            echo -e "${RED}Skipping project setup.${NC}"
-            PROJECT_PATH=""
+            log_error "Skipping project setup."
+            return
         fi
     fi
 
-    if [ -n "$PROJECT_PATH" ]; then
-        echo -e "${YELLOW}[7/7]${NC} (선택) Pre-setting project: $PROJECT_PATH"
-        echo ""
+    log_step 7 7 "(선택) Pre-setting project: $PROJECT_PATH"
+    echo ""
 
-        # .claude 폴더 생성
-        mkdir -p "$PROJECT_PATH/.claude"
+    setup_project_directories
+    setup_project_symlinks
+    setup_project_hooks
+    setup_project_settings
+    setup_project_claude_md
 
-        # 리소스 심볼릭 링크
-        setup_project_resource "agents" "$SHARED_DIR/agents" "$PROJECT_PATH/.claude/agents" "dir"
-        setup_project_resource "skills" "$SHARED_DIR/skills" "$PROJECT_PATH/.claude/skills" "dir"
-        setup_project_resource "scripts" "$SHARED_DIR/scripts" "$PROJECT_PATH/.claude/scripts" "dir"
-        [ -d "$SHARED_DIR/standards" ] && setup_project_resource "standards" "$SHARED_DIR/standards" "$PROJECT_PATH/.claude/standards" "dir"
-        [ -f "$SHARED_DIR/RULES.md" ] && setup_project_resource "RULES.md" "$SHARED_DIR/RULES.md" "$PROJECT_PATH/.claude/RULES.md" "file"
+    echo ""
+    echo -e "${GREEN}Pre-setup complete for: $PROJECT_PATH${NC}"
+    echo -e "  (참고: 이 설정 없이도 자동으로 됩니다)"
+    echo ""
+}
 
-        # project-agents 디렉토리 생성 (동적 에이전트용)
-        mkdir -p "$PROJECT_PATH/.claude/project-agents"
-        echo -e "       ${GREEN}✓${NC} project-agents directory created"
+setup_project_directories() {
+    mkdir -p "$PROJECT_PATH/.claude"
+    mkdir -p "$PROJECT_PATH/.claude/project-agents"
+    log_success "✓ project-agents directory created"
 
-        # docs/plans 디렉토리 생성 (구현 계획용)
-        mkdir -p "$PROJECT_PATH/docs/plans"
-        echo -e "       ${GREEN}✓${NC} docs/plans directory created"
+    mkdir -p "$PROJECT_PATH/docs/plans"
+    log_success "✓ docs/plans directory created"
+}
 
-        # hooks 디렉토리 복사 (task-tracker + project-context 체크)
-        HOOKS_TEMPLATE="$SHARED_DIR/templates/.claude/hooks"
-        if [ -d "$HOOKS_TEMPLATE" ]; then
-            mkdir -p "$PROJECT_PATH/.claude/hooks"
-            cp -r "$HOOKS_TEMPLATE"/* "$PROJECT_PATH/.claude/hooks/"
-            chmod +x "$PROJECT_PATH/.claude/hooks"/*.sh 2>/dev/null || true
-            echo -e "       ${GREEN}✓${NC} hooks configured (auto-profiling + task-tracker)"
-        fi
+setup_project_symlinks() {
+    create_symlink "$SHARED_DIR/agents" "$PROJECT_PATH/.claude/agents" "agents"
+    create_symlink "$SHARED_DIR/skills" "$PROJECT_PATH/.claude/skills" "skills"
+    create_symlink "$SHARED_DIR/scripts" "$PROJECT_PATH/.claude/scripts" "scripts"
+    [ -d "$SHARED_DIR/standards" ] && create_symlink "$SHARED_DIR/standards" "$PROJECT_PATH/.claude/standards" "standards"
+    [ -f "$SHARED_DIR/RULES.md" ] && create_symlink "$SHARED_DIR/RULES.md" "$PROJECT_PATH/.claude/RULES.md" "RULES.md"
+}
 
-        # settings.json에 hooks 설정 추가
-        PROJECT_SETTINGS_JSON="$PROJECT_PATH/.claude/settings.json"
-        HOOKS_SETTINGS="$SHARED_DIR/templates/.claude/settings.json"
-        if [ -f "$HOOKS_SETTINGS" ]; then
-            if [ ! -f "$PROJECT_SETTINGS_JSON" ]; then
-                cp "$HOOKS_SETTINGS" "$PROJECT_SETTINGS_JSON"
-                echo -e "       ${GREEN}✓${NC} settings.json created with hooks"
-            elif command -v jq &> /dev/null; then
-                # 기존 설정과 hooks 설정 병합
-                HOOKS_JSON=$(cat "$HOOKS_SETTINGS")
-                UPDATED=$(jq -s '.[0] * .[1]' "$PROJECT_SETTINGS_JSON" <(echo "$HOOKS_JSON"))
-                echo "$UPDATED" > "$PROJECT_SETTINGS_JSON"
-                echo -e "       ${GREEN}✓${NC} settings.json merged with hooks"
-            fi
-        fi
-
-        # settings.local.json 생성 (MCP 권한)
-        PROJECT_SETTINGS="$PROJECT_PATH/.claude/settings.local.json"
-        if [ ! -f "$PROJECT_SETTINGS" ]; then
-            echo '{}' > "$PROJECT_SETTINGS"
-        fi
-
-        if command -v jq &> /dev/null; then
-            ALLOW_JSON=$(printf '%s\n' "${MCP_ALLOWED_TOOLS[@]}" | jq -R . | jq -s .)
-            UPDATED=$(jq --argjson allow "$ALLOW_JSON" '
-                .permissions.allow //= [] |
-                .permissions.allow = (.permissions.allow + $allow | unique)
-            ' "$PROJECT_SETTINGS")
-            echo "$UPDATED" > "$PROJECT_SETTINGS"
-            echo -e "       ${GREEN}✓${NC} settings.local.json configured"
-        fi
-
-        # CLAUDE.md 심볼릭 링크 (템플릿에서 동기화)
-        CLAUDE_TEMPLATE="$SHARED_DIR/templates/CLAUDE.project.md"
-        CLAUDE_TARGET="$PROJECT_PATH/CLAUDE.md"
-
-        if [ -L "$CLAUDE_TARGET" ]; then
-            # 이미 심볼릭 링크면 최신 템플릿으로 갱신
-            rm "$CLAUDE_TARGET"
-            ln -s "$CLAUDE_TEMPLATE" "$CLAUDE_TARGET"
-            echo -e "       ${GREEN}✓${NC} CLAUDE.md updated (symlink)"
-        elif [ -f "$CLAUDE_TARGET" ]; then
-            # 기존 파일이 있으면 백업 후 심볼릭 링크
-            BACKUP_PATH="${CLAUDE_TARGET}.backup.$(date +%Y%m%d%H%M%S)"
-            mv "$CLAUDE_TARGET" "$BACKUP_PATH"
-            ln -s "$CLAUDE_TEMPLATE" "$CLAUDE_TARGET"
-            echo -e "       ${GREEN}✓${NC} CLAUDE.md → symlink (backup: $(basename $BACKUP_PATH))"
-        else
-            # 없으면 새로 심볼릭 링크
-            ln -s "$CLAUDE_TEMPLATE" "$CLAUDE_TARGET"
-            echo -e "       ${GREEN}✓${NC} CLAUDE.md created (symlink)"
-        fi
-
-        echo ""
-        echo -e "${GREEN}Pre-setup complete for: $PROJECT_PATH${NC}"
-        echo -e "  (참고: 이 설정 없이도 자동으로 됩니다)"
-        echo ""
+setup_project_hooks() {
+    local hooks_template="$SHARED_DIR/templates/.claude/hooks"
+    if [ -d "$hooks_template" ]; then
+        mkdir -p "$PROJECT_PATH/.claude/hooks"
+        cp -r "$hooks_template"/* "$PROJECT_PATH/.claude/hooks/"
+        chmod +x "$PROJECT_PATH/.claude/hooks"/*.sh 2>/dev/null || true
+        log_success "✓ hooks configured (auto-profiling + task-tracker)"
     fi
-else
-    echo -e "${GREEN}[7/7]${NC} Skipped (no project path provided)"
-fi
+}
 
-echo ""
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${CYAN}  자동 프로젝트 설정 활성화됨${NC}"
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
-echo -e "  이제 ${GREEN}어떤 프로젝트에서든${NC} Claude를 시작하면:"
-echo ""
-echo -e "    ${GREEN}1.${NC} 자동으로 프로젝트 감지"
-echo -e "    ${GREEN}2.${NC} 필요한 설정 자동 생성 (.claude/, 심볼릭 링크 등)"
-echo -e "    ${GREEN}3.${NC} 프로젝트 컨텍스트 없으면 자동 분석 시작"
-echo -e "    ${GREEN}4.${NC} 맞춤형 서브에이전트 자동 생성"
-echo ""
-echo -e "  ${YELLOW}프로젝트별 install.sh 실행이 필요 없습니다!${NC}"
-echo ""
+setup_project_settings() {
+    local project_settings="$PROJECT_PATH/.claude/settings.json"
+    local hooks_settings="$SHARED_DIR/templates/.claude/settings.json"
 
-echo ""
-echo -e "${GREEN}================================================${NC}"
-echo -e "${GREEN}  Installation complete!${NC}"
-echo -e "${GREEN}================================================${NC}"
-echo ""
-echo "Installed agents:"
-ls -1 "$SHARED_DIR/agents" 2>/dev/null | while read dir; do
-    echo "  - $dir"
-done
-echo ""
+    if [ -f "$hooks_settings" ]; then
+        if [ ! -f "$project_settings" ]; then
+            cp "$hooks_settings" "$project_settings"
+            log_success "✓ settings.json created with hooks"
+        elif command -v jq &> /dev/null; then
+            local merged=$(jq -s '.[0] * .[1]' "$project_settings" "$hooks_settings")
+            echo "$merged" > "$project_settings"
+            log_success "✓ settings.json merged with hooks"
+        fi
+    fi
 
-# MCP 서버 목록
-echo "Installed MCP servers:"
+    # settings.local.json (MCP 권한)
+    local local_settings="$PROJECT_PATH/.claude/settings.local.json"
+    [ ! -f "$local_settings" ] && echo '{}' > "$local_settings"
 
-# 로컬 MCP 서버
-if [ -d "$SHARED_DIR/mcp-servers" ]; then
-    for server_dir in "$SHARED_DIR/mcp-servers"/*/; do
-        if [ -d "$server_dir" ]; then
-            server_name=$(basename "$server_dir")
+    if command -v jq &> /dev/null; then
+        local allow_json=$(printf '%s\n' "${MCP_ALLOWED_TOOLS[@]}" | jq -R . | jq -s .)
+        local updated=$(jq --argjson allow "$allow_json" '
+            .permissions.allow //= [] |
+            .permissions.allow = (.permissions.allow + $allow | unique)
+        ' "$local_settings")
+        echo "$updated" > "$local_settings"
+        log_success "✓ settings.local.json configured"
+    fi
+}
+
+setup_project_claude_md() {
+    local template="$SHARED_DIR/templates/CLAUDE.project.md"
+    local target="$PROJECT_PATH/CLAUDE.md"
+
+    if [ -L "$target" ]; then
+        rm "$target"
+        ln -s "$template" "$target"
+        log_success "✓ CLAUDE.md updated (symlink)"
+    elif [ -f "$target" ]; then
+        local backup="${target}.backup.$(date +%Y%m%d%H%M%S)"
+        mv "$target" "$backup"
+        ln -s "$template" "$target"
+        log_success "✓ CLAUDE.md → symlink (backup: $(basename $backup))"
+    else
+        ln -s "$template" "$target"
+        log_success "✓ CLAUDE.md created (symlink)"
+    fi
+}
+
+# =============================================================================
+# 설치 완료 요약
+# =============================================================================
+print_summary() {
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}  자동 프로젝트 설정 활성화됨${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "  이제 ${GREEN}어떤 프로젝트에서든${NC} Claude를 시작하면:"
+    echo ""
+    echo -e "    ${GREEN}1.${NC} 자동으로 프로젝트 감지"
+    echo -e "    ${GREEN}2.${NC} 필요한 설정 자동 생성 (.claude/, 심볼릭 링크 등)"
+    echo -e "    ${GREEN}3.${NC} 프로젝트 컨텍스트 없으면 자동 분석 시작"
+    echo -e "    ${GREEN}4.${NC} 맞춤형 서브에이전트 자동 생성"
+    echo ""
+    echo -e "  ${YELLOW}프로젝트별 install.sh 실행이 필요 없습니다!${NC}"
+    echo ""
+    echo ""
+    echo -e "${GREEN}================================================${NC}"
+    echo -e "${GREEN}  Installation complete!${NC}"
+    echo -e "${GREEN}================================================${NC}"
+    echo ""
+
+    print_installed_agents
+    print_mcp_servers
+    print_usage_info
+}
+
+print_installed_agents() {
+    echo "Installed agents:"
+    ls -1 "$SHARED_DIR/agents" 2>/dev/null | while read dir; do
+        echo "  - $dir"
+    done
+    echo ""
+}
+
+print_mcp_servers() {
+    echo "Installed MCP servers:"
+
+    if [ -d "$SHARED_DIR/mcp-servers" ]; then
+        for server_dir in "$SHARED_DIR/mcp-servers"/*/; do
+            [ ! -d "$server_dir" ] && continue
+            local server_name=$(basename "$server_dir")
             if [ -f "$server_dir/dist/index.js" ]; then
                 echo -e "  ${GREEN}✅${NC} $server_name (local)"
             else
                 echo -e "  ${YELLOW}⚠️${NC}  $server_name (not built)"
             fi
-        fi
-    done
-fi
+        done
+    fi
 
-# External MCP 서버
-echo -e "  ${GREEN}✅${NC} playwright (Web E2E)"
-echo -e "  ${GREEN}✅${NC} appium-mcp (Mobile App)"
-echo -e "  ${GREEN}✅${NC} swagger-mcp (API Spec)"
-echo -e "  ${GREEN}✅${NC} figma (UI Design)"
-echo -e "  ${GREEN}✅${NC} atlassian (Confluence/Jira)"
-echo ""
-
-echo "Usage:"
-echo "  - Agents are now available in all Claude Code projects"
-echo "  - On session start, agents auto-update via git pull"
-if [ -n "$PROJECT_PATH" ]; then
+    echo -e "  ${GREEN}✅${NC} playwright (Web E2E)"
+    echo -e "  ${GREEN}✅${NC} appium-mcp (Mobile App)"
+    echo -e "  ${GREEN}✅${NC} swagger-mcp (API Spec)"
+    echo -e "  ${GREEN}✅${NC} figma (UI Design)"
+    echo -e "  ${GREEN}✅${NC} atlassian (Confluence/Jira)"
     echo ""
-    echo -e "Project: ${CYAN}$PROJECT_PATH${NC}"
-    echo "  cd $PROJECT_PATH && claude"
-fi
-echo ""
-echo -e "${YELLOW}⚠️  Please restart Claude Code to use MCP servers${NC}"
-echo ""
+}
+
+print_usage_info() {
+    echo "Usage:"
+    echo "  - Agents are now available in all Claude Code projects"
+    echo "  - On session start, agents auto-update via git pull"
+
+    if [ -n "$PROJECT_PATH" ]; then
+        echo ""
+        echo -e "Project: ${CYAN}$PROJECT_PATH${NC}"
+        echo "  cd $PROJECT_PATH && claude"
+    fi
+
+    echo ""
+    echo -e "${YELLOW}⚠️  Please restart Claude Code to use MCP servers${NC}"
+    echo ""
+}
+
+# =============================================================================
+# 메인 함수
+# =============================================================================
+main() {
+    echo ""
+    echo "=========================================="
+    echo "  Shared Claude Agents Installer"
+    echo "=========================================="
+    echo ""
+
+    check_nodejs
+    link_to_standard_location
+    handle_existing_agents
+    create_agents_symlink
+    link_additional_resources
+    configure_hooks_and_permissions
+    build_and_register_mcp_servers
+    setup_project
+    print_summary
+}
+
+# 스크립트 실행
+main "$@"

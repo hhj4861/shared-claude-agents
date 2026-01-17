@@ -758,10 +758,10 @@ docs/qa/latest/
 
 ```bash
 # 시나리오 파일을 포함하여 대시보드 실행
-/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/start.sh "/path/to/docs/qa/latest/scenarios/e2e-scenarios.md"
+$HOME/.claude/shared-agents/scripts/e2e-dashboard/start.sh "/path/to/docs/qa/latest/scenarios/e2e-scenarios.md"
 
 # 예시: SOCAR 프로젝트
-/Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/start.sh "/Users/admin/Desktop/workSpace/socar-backoffice-portal-frontend/docs/qa/latest/scenarios/e2e-scenarios.md"
+$HOME/.claude/shared-agents/scripts/e2e-dashboard/start.sh "$PROJECT_PATH/docs/qa/latest/scenarios/e2e-scenarios.md"
 ```
 
 ### 테스트 이력 저장소
@@ -769,7 +769,7 @@ docs/qa/latest/
 대시보드는 파일 기반으로 테스트 이력을 자동 저장합니다.
 
 ```
-저장 위치: /Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/history/
+저장 위치: $HOME/.claude/shared-agents/scripts/e2e-dashboard/history/
 
 파일 형식: {timestamp}_{project-name}.json
 예시: 2026-01-14T15-30-00_socar-backoffice.json
@@ -787,13 +787,13 @@ docs/qa/latest/
 
 ```bash
 # 1. 디렉토리에서 직접 확인
-ls -la /Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/history/
+ls -la $HOME/.claude/shared-agents/scripts/e2e-dashboard/history/
 
 # 2. API로 확인 (대시보드 실행 중일 때)
 curl http://localhost:3847/api/history
 
 # 3. 최근 이력 내용 확인
-cat /Users/admin/Desktop/workSpace/shared-claude-agents/scripts/e2e-dashboard/history/*.json | jq .
+cat $HOME/.claude/shared-agents/scripts/e2e-dashboard/history/*.json | jq .
 ```
 
 ### 이력 관련 API

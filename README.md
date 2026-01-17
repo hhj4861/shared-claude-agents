@@ -23,9 +23,16 @@ shared-claude-agents/
 │   │   ├── step3.5-scenario-reviewer.md # 시나리오 검토 (Gemini)
 │   │   ├── step3.6-scenario-refiner.md  # 시나리오 보완
 │   │   ├── step4-backend-tester.md    # 백엔드 테스터
-│   │   └── step4-e2e-tester.md        # E2E 테스터
+│   │   ├── demo-recorder.md           # 시연 영상 생성
+│   │   └── demo-script-generator.md   # 녹화 스크립트 생성
 │   ├── maintenance/           # 유지보수
-│   │   └── config-sync.md     # 설정 파일 동기화
+│   │   ├── config-sync.md     # 설정 파일 동기화
+│   │   ├── project-profiler.md    # 프로젝트 심층 분석
+│   │   ├── agent-generator.md     # 동적 에이전트 생성
+│   │   ├── agent-optimizer.md     # 에이전트 최적화
+│   │   ├── implementation-planner.md # 구현 계획 수립
+│   │   ├── session-learner.md     # 세션 학습 자동 저장
+│   │   └── task-tracker.md        # 작업 완료/TODO 추적
 │   └── devops/                # DevOps팀
 │       └── _orchestrator.md   # DevOps 디렉터
 │
@@ -62,6 +69,23 @@ shared-claude-agents/
 
 ## 설치
 
+### install.sh 역할
+
+> **install.sh는 최초 1회만 실행합니다.** 이후 모든 프로젝트 설정은 Hook이 자동으로 처리합니다.
+
+```yaml
+install.sh (1회):
+  - 글로벌 심볼릭 링크 생성 (~/.claude/agents, skills, scripts)
+  - MCP 서버 빌드 및 등록
+  - SessionStart Hook 등록
+  - MCP 권한 자동 설정
+
+Hook (자동):
+  - 프로젝트 감지 및 설정 (.claude/ 자동 생성)
+  - 프로젝트 분석 여부 질문
+  - 맞춤형 에이전트 동적 생성
+```
+
 ### 1. 저장소 클론
 
 ```bash
@@ -69,13 +93,13 @@ git clone <repository-url> ~/.claude/shared-agents
 cd ~/.claude/shared-agents
 ```
 
-### 2. 설치 스크립트 실행
+### 2. 설치 스크립트 실행 (1회)
 
 ```bash
-# 글로벌 설치만
+# 글로벌 설치 (이것만 실행하면 됨!)
 ./install.sh
 
-# 글로벌 설치 + 프로젝트 설정
+# (선택) 특정 프로젝트 미리 설정
 ./install.sh /path/to/project
 ```
 

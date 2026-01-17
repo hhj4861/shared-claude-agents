@@ -1,7 +1,8 @@
 ---
 name: agent-generator
 description: project-profiler의 분석 결과를 바탕으로 공통 에이전트/스킬을 최적화 생성하고, 도메인 전문 에이전트를 동적 생성합니다.
-model: opus
+model: sonnet
+# 모델 최적화: opus → sonnet (템플릿 기반 생성 작업에 적합)
 tools: Read, Write, Edit, Glob, Grep
 ---
 

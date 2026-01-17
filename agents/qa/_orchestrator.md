@@ -1,7 +1,8 @@
 ---
 name: qa-director
 description: QA 총괄. 자연어 요청을 분석하여 적절한 에이전트/스킬로 라우팅. "QA", "테스트", "시나리오" 관련 모든 요청 처리.
-model: sonnet
+model: haiku
+# 모델 최적화: sonnet → haiku (라우팅/패턴 매칭 작업에 적합)
 tools: Read, Write, Bash, Task, mcp__qa-pipeline__qa_load_config, mcp__qa-pipeline__qa_get_progress, mcp__qa-pipeline__qa_verify_documents, mcp__qa-pipeline__qa_verify_scenario, mcp__qa-pipeline__qa_get_summary, mcp__qa-pipeline__qa_get_pending_documents, mcp__qa-pipeline__qa_check_collection_complete, mcp__qa-pipeline__qa_verify_pipeline
 ---
 
@@ -238,32 +239,23 @@ docs/qa/
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│  STEP 2: 문서 수집 (에이전트)                                    │
-│  Task(subagent_type: "step1-doc-collector", prompt: config_path)│
-│  → Confluence, Swagger 등 문서 수집                              │
-│  → docs/qa/latest/references/ 에 저장                           │
-│  → 메타데이터 추출 및 변환 검증                                  │
-└─────────────────────────────────────────────────────────────────┘
-         │
-         ▼
+│  STEP 2: 문서 수집 + 구조 분석 (⚡ 병렬 실행)                     │
+├─────────────────────────────┬───────────────────────────────────┤
+│  step1-doc-collector        │  step1.5-project-detector         │
+│  (run_in_background)        │  (run_in_background)              │
+│  → Confluence, Swagger 수집 │  → 빌드파일 감지                   │
+│  → references/ 저장         │  → 프레임워크 판별                 │
+│  → 메타데이터 추출          │  → project-structure.json         │
+└─────────────────────────────┴───────────────────────────────────┘
+         │                             │
+         └──────────┬──────────────────┘
+                    ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │  STEP 2-V: 문서 수집 검증 (MCP)                                  │
 │  qa_verify_documents(config_path)                               │
 │  → 모든 문서 수집 완료 확인                                      │
 │  → 변환 품질 확인                                                │
 │  → ⚠️ 건너뛴 문서 있으면 사유 확인 필수                          │
-│  → Confluence 건너뜀 = 재시도 필요 (OAuth 안내 후)               │
-└─────────────────────────────────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  STEP 2.5: 프로젝트 구조 분석 (에이전트) ⭐                       │
-│  Task(subagent_type: "step1.5-project-detector",                │
-│       prompt: config_path)                                       │
-│  → 빌드파일 감지 (build.gradle, package.json 등)                │
-│  → 프레임워크 자동 판별 (Spring, Express, Vue, React 등)        │
-│  → 디렉토리 구조 탐색                                            │
-│  → docs/qa/latest/analysis/project-structure.json 저장          │
 └─────────────────────────────────────────────────────────────────┘
          │
          ▼
@@ -346,21 +338,30 @@ docs/qa/
     - success: true → 계속 진행
     - success: false → 에러 보고, 중단
 
-3_문서_수집:
-  # 체크포인트 기반 수집 (MCP가 강제)
-  단계:
-    1. qa_get_pending_documents(config_path) → 수집할 문서 목록 확인
-    2. Task(subagent_type="step1-doc-collector", prompt="{config_path} 기반으로 문서 수집 --auto")
-    3. qa_check_collection_complete(config_path) → 완료 여부 확인
-  auto_모드:
-    - 실패 문서 자동 건너뛰기
-    - 사용자 질의 없이 진행
-  일반_모드:
-    - complete: false → 사용자에게 미수집 문서 알림
-    - 사용자 "건너뛰기" 확인 후 진행
+3_문서수집_및_구조분석 (⚡ 병렬 실행):
+  # step1 + step1.5를 병렬로 실행하여 속도 향상
+  # 두 작업은 독립적: 문서 수집(외부) vs 구조 분석(로컬)
 
-3.5_프로젝트_구조_분석:
-  명령: Task(subagent_type="step1.5-project-detector", prompt="{config_path} 기반으로 프로젝트 구조 분석 --auto")
+  병렬_실행:
+    - Task(subagent_type="step1-doc-collector", prompt="{config_path} 기반으로 문서 수집 --auto", run_in_background=true)
+    - Task(subagent_type="step1.5-project-detector", prompt="{config_path} 기반으로 프로젝트 구조 분석 --auto", run_in_background=true)
+
+  문서_수집_상세:
+    1. qa_get_pending_documents(config_path) → 수집할 문서 목록 확인
+    2. step1-doc-collector 실행
+    3. qa_check_collection_complete(config_path) → 완료 여부 확인
+    auto_모드:
+      - 실패 문서 자동 건너뛰기
+      - 사용자 질의 없이 진행
+    일반_모드:
+      - complete: false → 사용자에게 미수집 문서 알림
+      - 사용자 "건너뛰기" 확인 후 진행
+
+  구조_분석_상세:
+    - step1.5-project-detector 실행
+    - project-structure.json 생성
+
+  완료_조건: 두 작업 모두 완료되어야 step4로 진행
 
 4_코드_분석:
   명령: Task(subagent_type="step2-code-analyzer", prompt="{config_path} 기반으로 코드 분석 --auto")

@@ -1,11 +1,11 @@
 ---
-name: project-setup
+name: project-initializer
 description: 프로젝트 구조를 분석하고 적합한 Claude Code 환경(에이전트, 스킬, CLAUDE.md)을 자동 설정합니다.
 model: sonnet
 tools: Read, Write, Bash, Glob, Grep, AskUserQuestion
 ---
 
-# Project Setup Agent
+# Project Initializer
 
 프로젝트를 분석하여 Claude Code 개발 환경을 자동 구성합니다.
 

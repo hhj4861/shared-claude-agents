@@ -11,9 +11,18 @@ tools: Read, Write, Edit, Glob, Grep
 프로젝트 분석 결과를 바탕으로 **에이전트와 스킬을 최적화 생성**하는 에이전트입니다.
 **v2.1**: tech-stack, operations, domain-experts 동적 에이전트 생성 지원
 
+## 필수 참조 문서
+
+에이전트 생성 전 반드시 아래 문서를 참조해야 합니다:
+
+| 문서 | 경로 | 내용 |
+|------|------|------|
+| **네이밍 규칙** | `standards/agent-naming-convention.md` | 파일명, Suffix, 그룹핑 규칙 |
+
 ## 핵심 원칙
 
 > **"원본의 철학은 유지하되, 프로젝트에 맞게 최적화하라"**
+> **"파일명만 보고 역할을 알 수 있어야 한다"**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -789,12 +798,23 @@ claude mcp add -s user playwright npx @playwright/mcp@latest
 
 ```yaml
 모든_프로젝트_필수:
-  - implementation-planner
-  - project-profiler
+  핵심_에이전트:
+    - implementation-planner    # 구현 계획 관리
+    - project-profiler          # 프로젝트 분석
+
+  컨벤션_에이전트:
+    - code-convention-guide     # 코드/에이전트 네이밍 규칙 관리
+
+  작업_추적_에이전트:
+    - task-tracker              # TODO/CHANGELOG 자동 관리
+    - parallel-insight-tracker  # 이슈 수집 및 에이전트 최적화 제안
 
 자동_연결:
-  - project-profiler 완료 → agent-generator 자동 호출
+  - project-profiler 완료 → code-convention-guide 호출 → agent-generator 자동 호출
+  - 에이전트 생성 전 .claude/conventions/agent-naming.md 참조 필수
   - 권장 에이전트가 있으면 생성 진행
+  - task-tracker Hook 자동 설정 (PostToolUse)
+  - parallel-insight-tracker Hook 자동 설정 (PostToolUse, 백그라운드)
 ```
 
 ---
@@ -825,7 +845,7 @@ claude mcp add -s user playwright npx @playwright/mcp@latest
 ```json
 {
   "agents": {
-    "shared": ["development/backend-dev", "qa/_orchestrator"],
+    "shared": ["development/backend-dev", "qa/qa-director"],
     "generated": [
       {
         "name": "wordpress-debugger",
@@ -962,7 +982,7 @@ WordPress REST API 연동 시 발생하는 문제를 진단하고 해결합니�
   📁 생성된 파일:
   [에이전트]
     .claude/agents/development/backend-dev.md (최적화)
-    .claude/agents/qa/_orchestrator.md (최적화)
+    .claude/agents/qa/qa-director.md (최적화)
     .claude/project-agents/wordpress-debugger.md (신규)
 
   [스킬]

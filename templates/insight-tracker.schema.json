@@ -1,0 +1,290 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Parallel Insight Tracker Schema",
+  "description": "메인 에이전트와 parallel-insight-tracker 간의 통신을 위한 JSON 스키마",
+
+  "definitions": {
+    "issue": {
+      "type": "object",
+      "description": "수집된 이슈 정보",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^ISS-[0-9]{3}$",
+          "description": "이슈 ID (예: ISS-001)"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "이슈 감지 시각 (ISO 8601)"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["bug", "performance", "configuration", "architecture", "security", "unknown"],
+          "description": "이슈 유형"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["critical", "high", "medium", "low"],
+          "description": "심각도"
+        },
+        "domain": {
+          "type": "string",
+          "enum": ["backend", "frontend", "infrastructure", "qa", "general"],
+          "description": "영향 도메인"
+        },
+        "techStack": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "관련 기술 스택 (예: [\"redis\", \"fastapi\"])"
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "이슈 요약"
+        },
+        "details": {
+          "type": "object",
+          "properties": {
+            "symptom": { "type": "string", "description": "증상" },
+            "cause": { "type": "string", "description": "원인" },
+            "solution": { "type": "string", "description": "해결책" },
+            "files": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "관련 파일 경로"
+            },
+            "tool": { "type": "string", "description": "감지된 도구 (Edit, Write, Bash)" },
+            "filePath": { "type": "string", "description": "수정된 파일 경로" },
+            "command": { "type": "string", "description": "실행된 명령어" }
+          }
+        },
+        "mainAgentAction": {
+          "type": "object",
+          "properties": {
+            "description": { "type": "string" },
+            "commits": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "description": "메인 에이전트의 조치 내용"
+        }
+      },
+      "required": ["id", "timestamp", "type", "domain", "summary"]
+    },
+
+    "routingDecision": {
+      "type": "object",
+      "description": "라우팅 결정 정보",
+      "properties": {
+        "issueId": {
+          "type": "string",
+          "description": "관련 이슈 ID"
+        },
+        "analysis": {
+          "type": "object",
+          "properties": {
+            "domain": { "type": "string" },
+            "techStack": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "category": { "type": "string" }
+          }
+        },
+        "candidateAgents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "matchScore": { "type": "number", "minimum": 0, "maximum": 1 },
+              "matchReason": { "type": "string" }
+            }
+          },
+          "description": "후보 에이전트 목록"
+        },
+        "selectedAgent": {
+          "type": "string",
+          "description": "선택된 에이전트"
+        },
+        "matchScore": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "매칭 점수"
+        },
+        "confidence": {
+          "type": "string",
+          "enum": ["high", "medium", "low"],
+          "description": "결정 신뢰도"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["issueId", "selectedAgent", "confidence"]
+    },
+
+    "analysis": {
+      "type": "object",
+      "description": "에이전트 반영 여부 분석",
+      "properties": {
+        "issueId": { "type": "string" },
+        "agentName": { "type": "string" },
+        "agentFile": { "type": "string", "description": "에이전트 파일 경로" },
+        "reflectionStatus": {
+          "type": "string",
+          "enum": ["reflected", "not_reflected", "partial", "unknown"],
+          "description": "반영 상태"
+        },
+        "reason": {
+          "type": "string",
+          "description": "상태 판단 이유"
+        },
+        "details": {
+          "type": "object",
+          "properties": {
+            "covered": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "에이전트가 커버하는 항목"
+            },
+            "notCovered": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "에이전트가 커버하지 않는 항목"
+            }
+          }
+        },
+        "recommendation": {
+          "type": "string",
+          "description": "권장 사항"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["issueId", "agentName", "reflectionStatus"]
+    },
+
+    "suggestion": {
+      "type": "object",
+      "description": "에이전트 최적화 제안",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^SUG-[0-9]{3}$",
+          "description": "제안 ID (예: SUG-001)"
+        },
+        "issueId": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["agent_update", "agent_create", "routing_update", "hook_update"],
+          "description": "제안 유형"
+        },
+        "priority": {
+          "type": "string",
+          "enum": ["critical", "high", "medium", "low"]
+        },
+        "target": {
+          "type": "object",
+          "properties": {
+            "agent": { "type": "string" },
+            "file": { "type": "string" }
+          }
+        },
+        "suggestion": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": ["add_section", "update_section", "create_file", "update_routing"]
+            },
+            "description": { "type": "string" },
+            "content": { "type": "string", "description": "추가/수정할 내용" },
+            "domain": { "type": "string" }
+          }
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "applied", "rejected", "expired"],
+          "default": "pending"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "appliedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "type", "priority", "status", "createdAt"]
+    }
+  },
+
+  "properties": {
+    "issues": {
+      "type": "object",
+      "description": "일일 이슈 파일 구조 (.claude/insight-tracker/issues/{date}.json)",
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "issues": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/issue" }
+        }
+      }
+    },
+
+    "routing": {
+      "type": "object",
+      "description": "일일 라우팅 결정 파일 구조 (.claude/insight-tracker/routing/{date}.json)",
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "routingDecisions": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/routingDecision" }
+        }
+      }
+    },
+
+    "analysis": {
+      "type": "object",
+      "description": "일일 분석 파일 구조 (.claude/insight-tracker/analysis/{date}.json)",
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "analyses": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/analysis" }
+        }
+      }
+    },
+
+    "suggestions": {
+      "type": "object",
+      "description": "일일 제안 파일 구조 (.claude/insight-tracker/suggestions/{date}.json)",
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "suggestions": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/suggestion" }
+        }
+      }
+    },
+
+    "pendingOptimizations": {
+      "type": "object",
+      "description": "대기 중인 최적화 제안 (.claude/insight-tracker/pending-optimizations.json)",
+      "properties": {
+        "pendingOptimizations": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/suggestion" }
+        }
+      }
+    }
+  }
+}

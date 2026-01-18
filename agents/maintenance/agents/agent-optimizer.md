@@ -42,7 +42,7 @@ tools: Read, Write, Edit, Glob, Grep, Bash
   - "agent optimize"
 
 자동_실행:
-  - auto-project-setup.sh --merge 실행 후 안내에 따라
+  - auto-project-initializer.sh --merge 실행 후 안내에 따라
 ```
 
 ---
@@ -147,14 +147,14 @@ dev:
   에이전트:
     - frontend-dev
     - backend-dev
-    - dev-lead
+    - dev-director
 
 maintenance:
   키워드: [config, setup, sync, tracker, profiler, generator, optimizer]
   에이전트:
-    - config-sync
+    - config-synchronizer
     - task-tracker
-    - project-setup
+    - project-initializer
     - project-profiler
     - agent-generator
     - agent-optimizer
@@ -171,7 +171,7 @@ domain:
 ```yaml
 orchestrator:
   특징: 다른 에이전트를 조율/호출
-  예시: qa-director, dev-lead
+  예시: qa-director, dev-director
 
 tester:
   특징: 테스트 실행
@@ -223,7 +223,7 @@ generator:
     },
     "dev": {
       "description": "개발 관련",
-      "agents": ["frontend-dev", "backend-dev", "dev-lead"]
+      "agents": ["frontend-dev", "backend-dev", "dev-director"]
     },
     "maintenance": {
       "description": "유지보수 및 설정",
@@ -286,7 +286,7 @@ generator:
 ### dev/ (3개)
 - frontend-dev (assistant)
 - backend-dev (assistant)
-- dev-lead (orchestrator)
+- dev-director (orchestrator)
 
 ### maintenance/ (4개)
 - project-profiler (analyzer)

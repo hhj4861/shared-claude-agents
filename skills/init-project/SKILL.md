@@ -10,11 +10,11 @@ args: "[--force] [--minimal]"
 
 ## 실행 방법
 
-**project-setup 에이전트로 위임합니다.**
+**project-initializer 에이전트로 위임합니다.**
 
 ```javascript
 Task({
-  subagent_type: "project-setup",
+  subagent_type: "project-initializer",
   prompt: `
     현재 디렉토리: ${process.cwd()}
     옵션: ${args || "기본"}

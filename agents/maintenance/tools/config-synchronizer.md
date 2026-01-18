@@ -1,4 +1,11 @@
-# Config Sync Agent
+---
+name: config-synchronizer
+description: 프로젝트 설정 파일 동기화 에이전트. shared-claude-agents 변경 시 관련 설정 파일들을 자동으로 업데이트합니다.
+model: haiku
+tools: Read, Write, Edit, Glob, Grep
+---
+
+# Config Synchronizer
 
 프로젝트 설정 파일 동기화 에이전트. shared-claude-agents 변경 시 관련 설정 파일들을 자동으로 업데이트합니다.
 
@@ -26,7 +33,7 @@ agents, skills, MCP 서버 등이 변경될 때 다음 파일들을 동기화:
   MCP_변경:
     - mcp-servers/**/* 추가/수정
   파이프라인_변경:
-    - agents/qa/_orchestrator.md 수정
+    - agents/qa/qa-director.md 수정
 ```
 
 ## 동기화 규칙
@@ -74,7 +81,7 @@ agents, skills, MCP 서버 등이 변경될 때 다음 파일들을 동기화:
 ### 4. 파이프라인 단계 추가 시
 
 ```
-감지: agents/qa/step*.md 추가 또는 _orchestrator.md 수정
+감지: agents/qa/step*.md 추가 또는 qa-director.md 수정
 
 업데이트:
   ├── templates/CLAUDE.project.md
@@ -128,7 +135,7 @@ fi
 
 **변경된 파일:**
 - `agents/qa/step3.5-scenario-reviewer.md` (신규)
-- `agents/qa/_orchestrator.md` (수정)
+- `agents/qa/qa-director.md` (수정)
 
 **동기화 대상:**
 ```

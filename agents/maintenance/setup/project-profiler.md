@@ -699,7 +699,7 @@ claude mcp list
 |----------|------|
 | `implementation-planner` | 분석 완료 후 구현 계획 수립 |
 | `agent-generator` | 추천된 에이전트 실제 생성 |
-| `project-setup` | 기술 스택 기반 환경 설정 (기존) |
+| `project-initializer` | 기술 스택 기반 환경 설정 |
 
 ---
 

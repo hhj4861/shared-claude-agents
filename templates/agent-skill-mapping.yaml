@@ -10,10 +10,10 @@ mappings:
   # ============================================
   # Architecture 에이전트
   # ============================================
-  architecture/_orchestrator:
+  architecture/architect-director:
     skills: []
     category: architecture
-    description: "아키텍처 에이전트 오케스트레이터"
+    description: "아키텍처팀 총괄 디렉터"
     project_types: [fullstack, backend, monorepo]
 
   architecture/data-architect:
@@ -43,10 +43,10 @@ mappings:
   # ============================================
   # Development 에이전트
   # ============================================
-  development/_orchestrator:
+  development/dev-director:
     skills: [commit]
     category: development
-    description: "개발 에이전트 오케스트레이터"
+    description: "개발팀 총괄 디렉터"
     project_types: [all]
 
   development/backend-dev:
@@ -70,10 +70,10 @@ mappings:
   # ============================================
   # QA 에이전트
   # ============================================
-  qa/_orchestrator:
+  qa/qa-director:
     skills: [qa-scenario, api-test, e2e-test]
     category: qa
-    description: "QA 오케스트레이터 (qa-director)"
+    description: "QA팀 총괄 디렉터"
     project_types: [all]
 
   qa/step1-doc-collector:
@@ -118,85 +118,112 @@ mappings:
     description: "백엔드 테스트"
     project_types: [backend, fullstack, monorepo]
 
-  qa/demo-recorder:
+  # ============================================
+  # Demo 에이전트
+  # ============================================
+  demo/demo-recorder:
     skills: [e2e-test]
-    category: qa
+    category: demo
     description: "데모 녹화"
     project_types: [frontend, fullstack]
 
-  qa/demo-script-generator:
+  demo/demo-script-generator:
     skills: []
-    category: qa
+    category: demo
     description: "데모 스크립트 생성"
     project_types: [all]
 
   # ============================================
   # Maintenance 에이전트 (항상 포함)
   # ============================================
-  maintenance/implementation-planner:
-    skills: []
-    category: maintenance
-    description: "구현 계획 수립"
-    required: true  # 모든 프로젝트 필수
-    project_types: [all]
 
-  maintenance/project-profiler:
+  # setup/ - 설정 관련
+  maintenance/setup/project-profiler:
     skills: []
     category: maintenance
     description: "프로젝트 분석"
     required: true  # 모든 프로젝트 필수
     project_types: [all]
 
-  maintenance/agent-generator:
+  maintenance/setup/project-initializer:
+    skills: [init-project]
+    category: maintenance
+    description: "프로젝트 초기화"
+    project_types: [all]
+
+  # agents/ - 에이전트 관리
+  maintenance/agents/agent-generator:
     skills: []
     category: maintenance
     description: "에이전트 생성"
     required: true
     project_types: [all]
 
-  maintenance/agent-optimizer:
+  maintenance/agents/agent-optimizer:
     skills: []
     category: maintenance
     description: "에이전트 최적화"
     project_types: [all]
 
-  maintenance/config-sync:
-    skills: []
-    category: maintenance
-    description: "설정 동기화"
-    project_types: [all]
-
-  maintenance/project-setup:
-    skills: [init-project]
-    category: maintenance
-    description: "프로젝트 설정"
-    project_types: [all]
-
-  maintenance/task-tracker:
+  # tracking/ - 추적 관련
+  maintenance/tracking/task-tracker:
     skills: []
     category: maintenance
     description: "작업 추적"
     project_types: [all]
 
-  maintenance/todo-summarizer:
+  maintenance/tracking/parallel-insight-tracker:
     skills: []
     category: maintenance
-    description: "TODO 요약"
+    description: "인사이트 추적 (병렬)"
     project_types: [all]
 
-  maintenance/workflow-validator:
+  maintenance/tracking/session-learner:
+    skills: []
+    category: maintenance
+    description: "세션 학습"
+    project_types: [all]
+
+  # conventions/ - 컨벤션 관련
+  maintenance/conventions/code-convention-guide:
+    skills: []
+    category: maintenance
+    description: "코드 컨벤션 가이드"
+    project_types: [all]
+
+  # tools/ - 유틸리티
+  maintenance/tools/implementation-planner:
+    skills: []
+    category: maintenance
+    description: "구현 계획 수립"
+    required: true  # 모든 프로젝트 필수
+    project_types: [all]
+
+  maintenance/tools/config-synchronizer:
+    skills: []
+    category: maintenance
+    description: "설정 동기화"
+    project_types: [all]
+
+  maintenance/tools/workflow-validator:
     skills: []
     category: maintenance
     description: "워크플로우 검증"
     project_types: [all]
 
+  maintenance/tools/todo-summarizer:
+    skills: []
+    category: maintenance
+    description: "TODO 요약"
+    project_types: [all]
+
   # ============================================
   # DevOps 에이전트
   # ============================================
-  devops/_orchestrator:
+  devops/devops-director:
     skills: []
     category: devops
-    description: "DevOps 오케스트레이터"
+    description: "DevOps팀 총괄 디렉터"
     project_types: [backend, fullstack, monorepo]
 
 # ============================================
@@ -213,7 +240,7 @@ project_type_defaults:
   frontend:
     agents:
       - development/frontend-dev
-      - qa/_orchestrator
+      - qa/qa-director
     skills:
       - e2e-test
       - qa-scenario
@@ -221,7 +248,7 @@ project_type_defaults:
   backend:
     agents:
       - development/backend-dev
-      - qa/_orchestrator
+      - qa/qa-director
       - qa/step4-backend-tester
     skills:
       - api-test
@@ -231,7 +258,7 @@ project_type_defaults:
     agents:
       - development/frontend-dev
       - development/backend-dev
-      - qa/_orchestrator
+      - qa/qa-director
       - qa/step4-backend-tester
     skills:
       - e2e-test
@@ -242,7 +269,7 @@ project_type_defaults:
     agents:
       - development/frontend-dev
       - development/backend-dev
-      - qa/_orchestrator
+      - qa/qa-director
       - architecture/system-designer
     skills:
       - e2e-test
@@ -263,7 +290,7 @@ project_type_defaults:
   mobile:
     agents:
       - development/frontend-dev
-      - qa/_orchestrator
+      - qa/qa-director
     skills:
       - e2e-test
       - qa-scenario
@@ -413,6 +440,6 @@ dynamic_detection:
 # 필수 에이전트 (모든 프로젝트)
 # ============================================
 required_agents:
-  - maintenance/implementation-planner
-  - maintenance/project-profiler
-  - maintenance/agent-generator
+  - maintenance/tools/implementation-planner
+  - maintenance/setup/project-profiler
+  - maintenance/agents/agent-generator
